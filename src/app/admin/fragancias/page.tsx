@@ -1,4 +1,3 @@
-import AdminShell from '@/components/admin/AdminShell'
 import FragranceManager from '@/components/admin/FragranceManager'
 import { getAdminFragrances } from '@/lib/admin/actions'
 import { Leaf } from 'lucide-react'
