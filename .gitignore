@@ -1,5 +1,5 @@
 # dependencies
-app/node_modules/
+node_modules/
 .pnp
 .pnp.*
 .yarn/*
@@ -9,21 +9,19 @@ app/node_modules/
 !.yarn/versions
 
 # testing
-app/coverage/
+coverage/
 
 # next.js
-app/.next/
-app/out/
+.next/
+out/
 
 # production
-app/build/
+build/
 
 # misc
 .DS_Store
 *.pem
 .env.local
-app/.env*
-app/.env.local
 .env
 .antigravityignore
 
@@ -37,9 +35,5 @@ yarn-error.log*
 .vercel
 
 # typescript
-app/*.tsbuildinfo
-app/next-env.d.ts
-
-# temp files
-app/scripts/check-logo.mjs
-app/scripts/list-tables.mjs
+*.tsbuildinfo
+next-env.d.ts
