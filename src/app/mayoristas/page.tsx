@@ -43,7 +43,7 @@ export default async function MayoristasPage() {
             </div>
           </div>
           
-          <WholesaleQuickOrder products={products} />
+          <WholesaleQuickOrder products={products} fragrances={fragrances} />
         </div>
       </div>
     )
