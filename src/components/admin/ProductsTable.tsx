@@ -21,7 +21,9 @@ export function ProductsTable({ products }: { products: AdminProduct[] }) {
   }
 
   const filtered = products.filter(p => 
-    view === 'retail' ? !p.is_wholesale_only : p.is_wholesale_only
+    view === 'retail' 
+      ? !p.is_wholesale_only 
+      : (p.is_wholesale_only || !!p.wholesale_category)
   )
 
   return (
