@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { User, Package, LogOut, ChevronRight, ShoppingBag } from 'lucide-react';
 import { logout } from '@/lib/auth/actions';
 import { UserOrder } from '@/lib/user/actions';
+import Link from 'next/link';
 
 interface Profile {
   full_name: string | null;
@@ -97,13 +98,13 @@ export default function AccountView({
                   <p className="text-gray-500 mb-6 max-w-xs mx-auto">
                     Cuando realices tu primera compra, aparecerá aquí para que puedas seguir su estado.
                   </p>
-                  <a 
+                  <Link 
                     href="/productos"
                     className="inline-flex items-center justify-center px-6 py-3 rounded-full font-bold text-white transition-transform hover:scale-105"
                     style={{ backgroundColor: 'var(--accent-teal)' }}
                   >
                     Ver Productos
-                  </a>
+                  </Link>
                 </div>
               ) : (
                 <div className="grid gap-4">
