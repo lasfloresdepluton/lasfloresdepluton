@@ -32,7 +32,7 @@ export interface UserProfile {
   is_verified_wholesaler: boolean
 }
 
-export async function getProducts(categorySlug?: string): Promise<ProductWithVariants[]> {
+export async function getProducts(categorySlug?: string, includeWholesale: boolean = false): Promise<ProductWithVariants[]> {
   const supabase = await createClient()
 
   let query = supabase
@@ -46,7 +46,12 @@ export async function getProducts(categorySlug?: string): Promise<ProductWithVar
       )
     `)
     .eq('is_active', true)
-    .order('name')
+
+  if (!includeWholesale) {
+    query = query.eq('is_wholesale_only', false)
+  }
+
+  query = query.order('name')
 
   if (categorySlug) {
     // Filter by category slug via join

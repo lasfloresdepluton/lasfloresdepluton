@@ -18,17 +18,17 @@ const categoryEmojis: Record<string, string> = {
 
 export default async function ProductsPage({ searchParams }: PageProps) {
   const params = await searchParams
-  const [products, categories, user] = await Promise.all([
-    getProducts(params.categoria),
-    getCategories(),
-    getSession(),
-  ])
-
+  const user = await getSession()
   let isWholesale = false
   if (user) {
     const profile = await getProfile(user.id) as { role: string; is_verified_wholesaler: boolean } | null
     isWholesale = profile?.role === 'wholesaler' && !!profile?.is_verified_wholesaler
   }
+
+  const [products, categories] = await Promise.all([
+    getProducts(params.categoria, isWholesale),
+    getCategories(),
+  ])
 
   const filtered = params.buscar
     ? products.filter((p) =>

@@ -34,6 +34,9 @@ export default function ProductForm({ categories }: Props) {
   const [categoryId, setCategoryId] = useState('')
   const [isPack, setIsPack] = useState(false)
   const [packSlots, setPackSlots] = useState('10')
+  const [isWholesaleOnly, setIsWholesaleOnly] = useState(false)
+  const [wholesaleCategory, setWholesaleCategory] = useState('')
+  const [minQtyPerVariant, setMinQtyPerVariant] = useState('1')
 
   function handleNameChange(val: string) {
     setName(val)
@@ -55,6 +58,9 @@ export default function ProductForm({ categories }: Props) {
         category_id: categoryId || undefined,
         is_pack: isPack,
         pack_slots: isPack ? parseInt(packSlots) || 10 : 0,
+        is_wholesale_only: isWholesaleOnly,
+        wholesale_category: wholesaleCategory || undefined,
+        min_qty_per_variant: parseInt(minQtyPerVariant) || 1,
       })
       if (!res.ok) {
         setError(res.error ?? 'Error desconocido')
@@ -222,6 +228,63 @@ export default function ProductForm({ categories }: Props) {
             />
           </div>
         )}
+      </div>
+
+      {/* Wholesale Settings */}
+      <div
+        className="rounded-xl p-5 space-y-4 shadow-sm"
+        style={{ background: 'rgba(61,189,181,0.06)', border: '1px solid rgba(61,189,181,0.15)' }}
+      >
+        <div className="flex items-center gap-2 mb-2">
+          <Package size={16} style={{ color: '#3dbdb5' }} />
+          <h3 className="text-sm font-bold text-white uppercase tracking-wider">Ajustes Mayoristas</h3>
+        </div>
+
+        <label className="flex items-center gap-2.5 cursor-pointer">
+          <div
+            onClick={() => setIsWholesaleOnly(!isWholesaleOnly)}
+            className="w-11 h-6 rounded-full flex items-center transition-all duration-200 px-1"
+            style={{ background: isWholesaleOnly ? '#3dbdb5' : 'rgba(255,255,255,0.15)', cursor: 'pointer' }}
+          >
+            <div
+              className="w-4 h-4 rounded-full bg-white transition-all duration-200"
+              style={{ transform: isWholesaleOnly ? 'translateX(20px)' : 'translateX(0)' }}
+            />
+          </div>
+          <div>
+            <p className="text-sm font-medium text-white">¿Es exclusivo Mayorista?</p>
+            <p className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>
+              Solo será visible para usuarios registrados como mayoristas
+            </p>
+          </div>
+        </label>
+
+        <div className="grid grid-cols-2 gap-4 pt-2">
+          <div>
+            <label className="block text-xs font-semibold mb-1.5" style={{ color: 'rgba(255,255,255,0.5)' }}>
+              CATEGORÍA MAYORISTA (AGRUPACIÓN)
+            </label>
+            <input
+              value={wholesaleCategory}
+              onChange={(e) => setWholesaleCategory(e.target.value)}
+              placeholder="Ej: Clásicos, Especialidades"
+              style={inputStyle}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold mb-1.5" style={{ color: 'rgba(255,255,255,0.5)' }}>
+              MÍNIMO POR FRAGANCIA
+            </label>
+            <input
+              type="number"
+              value={minQtyPerVariant}
+              onChange={(e) => setMinQtyPerVariant(e.target.value)}
+              min="1"
+              placeholder="10"
+              style={inputStyle}
+            />
+          </div>
+        </div>
       </div>
 
       {error && (

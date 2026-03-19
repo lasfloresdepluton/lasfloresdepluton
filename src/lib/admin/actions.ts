@@ -137,6 +137,9 @@ export interface AdminProduct {
   category_id: string | null
   categories: { name: string } | null
   created_at: string
+  is_wholesale_only: boolean
+  wholesale_category: string | null
+  min_qty_per_variant: number
 }
 
 export interface AdminVariant {
@@ -185,6 +188,9 @@ export async function createProduct(input: {
   category_id?: string
   is_pack?: boolean
   pack_slots?: number
+  is_wholesale_only?: boolean
+  wholesale_category?: string
+  min_qty_per_variant?: number
 }): Promise<{ ok: boolean; id?: string; error?: string }> {
   const supabase = createAdminClient()
   const { data, error } = await (supabase.from('products') as any)
@@ -209,6 +215,9 @@ export async function updateProduct(id: string, input: Partial<{
   is_active: boolean
   image_url: string | null
   gallery_urls: string[]
+  is_wholesale_only: boolean
+  wholesale_category: string | null
+  min_qty_per_variant: number
 }>) {
   const supabase = createAdminClient()
   const { error } = await (supabase.from('products') as any).update(input).eq('id', id)
@@ -433,4 +442,37 @@ export async function getDashboardStats() {
     totalUsers: totalUsers ?? 0,
     pendingWholesalers: pendingWholesalers ?? 0,
   }
+}
+
+// ── WHOLESALE TIERS ──────────────────────────────────────────────────────────
+
+export interface WholesaleTier {
+  id: string
+  product_id: string
+  min_total_qty: number
+  fixed_total_price: number | null
+  unit_price: number | null
+  label: string | null
+}
+
+export async function getWholesaleTiers(productId: string): Promise<WholesaleTier[]> {
+  const supabase = createAdminClient()
+  const { data } = await (supabase.from('wholesale_tiers') as any)
+    .select('*')
+    .eq('product_id', productId)
+    .order('min_total_qty', { ascending: true })
+  return data ?? []
+}
+
+export async function upsertWholesaleTier(input: Partial<WholesaleTier>) {
+  const supabase = createAdminClient()
+  const { error } = await (supabase.from('wholesale_tiers') as any).upsert(input)
+  revalidatePath('/admin/productos/[id]')
+  return { ok: !error, error: error?.message }
+}
+
+export async function deleteWholesaleTier(id: string) {
+  const supabase = createAdminClient()
+  const { error } = await (supabase.from('wholesale_tiers') as any).delete().eq('id', id)
+  return { ok: !error, error: error?.message }
 }
