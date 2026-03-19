@@ -21,9 +21,7 @@ export function ProductsTable({ products }: { products: AdminProduct[] }) {
   }
 
   const filtered = products.filter(p => 
-    view === 'retail' 
-      ? !p.is_wholesale_only 
-      : (p.is_wholesale_only || !!p.wholesale_category)
+    view === 'retail' ? !p.is_wholesale_only : p.is_wholesale_only
   )
 
   return (
@@ -58,9 +56,15 @@ export function ProductsTable({ products }: { products: AdminProduct[] }) {
           <thead>
             <tr style={{ background: 'rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.4)' }}>
               <th className="px-4 py-3 text-left">Producto</th>
-              <th className="px-4 py-3 text-left hidden md:table-cell">Categoría</th>
-              <th className="px-4 py-3 text-left">Precio min.</th>
-              <th className="px-4 py-3 text-left hidden md:table-cell">Precio may.</th>
+              <th className="px-4 py-3 text-left hidden md:table-cell">
+                {view === 'retail' ? 'Categoría' : 'Categoría Mayorista'}
+              </th>
+              <th className="px-4 py-3 text-left">
+                {view === 'retail' ? 'Precio min.' : 'P.U. Mayorista'}
+              </th>
+              {view === 'wholesale' && (
+                <th className="px-4 py-3 text-left hidden lg:table-cell">Reglas</th>
+              )}
               <th className="px-4 py-3 text-left">Estado</th>
               <th className="px-4 py-3 text-left">Acciones</th>
             </tr>
@@ -84,14 +88,21 @@ export function ProductsTable({ products }: { products: AdminProduct[] }) {
                     )}
                   </td>
                   <td className="px-4 py-3 hidden md:table-cell" style={{ color: 'rgba(255,255,255,0.45)' }}>
-                    {p.categories?.name ?? '—'}
-                  </td>
-                  <td className="px-4 py-3 font-semibold" style={{ color: '#3dbdb5' }}>
-                    {formatPrice(p.retail_price)}
-                  </td>
-                  <td className="px-4 py-3 hidden md:table-cell" style={{ color: '#c8a97a' }}>
-                    {formatPrice(p.wholesale_price)}
-                  </td>
+                    {view === 'retail' 
+                      ? (p.categories?.name ?? '—')
+                      : (p.wholesale_category ?? '—')}
+                   </td>
+                   <td className="px-4 py-3 font-semibold" style={{ color: view === 'retail' ? '#3dbdb5' : '#c8a97a' }}>
+                    {formatPrice(view === 'retail' ? p.retail_price : p.wholesale_price)}
+                   </td>
+                   {view === 'wholesale' && (
+                     <td className="px-4 py-3 hidden lg:table-cell">
+                        <div className="flex flex-col gap-1">
+                           <span className="text-[10px] opacity-40 uppercase font-black">Mínimo x Fragancia</span>
+                           <span className="text-xs font-bold text-[#c8a97a]">{p.min_qty_per_variant} u.</span>
+                        </div>
+                     </td>
+                   )}
                   <td className="px-4 py-3">
                     <span className="text-xs px-2 py-0.5 rounded-full"
                       style={{
