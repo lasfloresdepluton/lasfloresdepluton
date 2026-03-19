@@ -10,6 +10,7 @@ import { Loader2, Eye, EyeOff, Pencil } from 'lucide-react'
 export function ProductsTable({ products }: { products: AdminProduct[] }) {
   const [pending, startTransition] = useTransition()
   const [actionId, setActionId] = useState<string | null>(null)
+  const [view, setView] = useState<'retail' | 'wholesale'>('retail')
 
   function handleToggle(id: string, isActive: boolean) {
     setActionId(id)
@@ -19,13 +20,38 @@ export function ProductsTable({ products }: { products: AdminProduct[] }) {
     })
   }
 
+  const filtered = products.filter(p => 
+    view === 'retail' ? !p.is_wholesale_only : p.is_wholesale_only
+  )
+
   return (
-    <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.08)' }}>
-      {products.length === 0 ? (
-        <div className="px-6 py-12 text-center" style={{ color: 'rgba(255,255,255,0.3)' }}>
-          No hay productos cargados aún. Hacé click en "Nuevo producto" para empezar.
-        </div>
-      ) : (
+    <div className="space-y-4">
+      {/* List Toggle */}
+      <div className="flex bg-white/5 p-1 rounded-xl w-fit border border-white/10">
+        <button
+          onClick={() => setView('retail')}
+          className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
+            view === 'retail' ? 'bg-[#3dbdb5] text-white shadow-lg' : 'text-white/40 hover:text-white/70'
+          }`}
+        >
+          LISTA MINORISTA
+        </button>
+        <button
+          onClick={() => setView('wholesale')}
+          className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
+            view === 'wholesale' ? 'bg-[#c8a97a] text-white shadow-lg' : 'text-white/40 hover:text-white/70'
+          }`}
+        >
+          LISTA MAYORISTA
+        </button>
+      </div>
+
+      <div className="rounded-2xl overflow-hidden" style={{ border: '1px solid rgba(255,255,255,0.08)' }}>
+        {filtered.length === 0 ? (
+          <div className="px-6 py-12 text-center" style={{ color: 'rgba(255,255,255,0.3)' }}>
+            No hay productos en la lista {view === 'retail' ? 'minorista' : 'mayorista'}.
+          </div>
+        ) : (
         <table className="w-full text-sm">
           <thead>
             <tr style={{ background: 'rgba(255,255,255,0.04)', color: 'rgba(255,255,255,0.4)' }}>
@@ -108,6 +134,7 @@ export function ProductsTable({ products }: { products: AdminProduct[] }) {
           </tbody>
         </table>
       )}
+      </div>
     </div>
   )
 }

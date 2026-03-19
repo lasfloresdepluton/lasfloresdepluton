@@ -1,13 +1,56 @@
 import NavbarWrapper from '@/components/layout/NavbarWrapper'
 import Link from 'next/link'
-import { Store, Clock, Shield, MessageCircle } from 'lucide-react'
+import { Store, Clock, Shield, MessageCircle, FileText } from 'lucide-react'
+import { getSession, getProfile } from '@/lib/auth/actions'
+import { getProducts } from '@/lib/products/actions'
+import WholesaleQuickOrder from '@/components/shop/WholesaleQuickOrder'
 
-export default function MayoristasPage() {
+export default async function MayoristasPage() {
+  const user = await getSession()
+  let isWholesaler = false
+  let profile = null
+
+  if (user) {
+    profile = await getProfile(user.id) as { role: string; is_verified_wholesaler: boolean } | null
+    isWholesaler = profile?.role === 'wholesaler' && !!profile?.is_verified_wholesaler
+  }
+
+  // If verified wholesaler, show the quick order table
+  if (isWholesaler) {
+    const products = await getProducts(undefined, true) // Include wholesale products
+    return (
+      <div style={{ background: '#F5F0E8', minHeight: '100vh' }}>
+        <NavbarWrapper />
+        <div className="pt-28 pb-20 px-6 max-w-6xl mx-auto">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl flex items-center justify-center bg-[#3dbdb51a] text-[#3dbdb5]">
+                <FileText size={24} />
+              </div>
+              <div>
+                <h1 className="font-display text-3xl font-black text-gray-900 leading-tight">Lista Mayorista 2026</h1>
+                <p className="text-gray-500 font-medium italic">Marzo - Vigente hasta 31/03</p>
+              </div>
+            </div>
+            <div className="bg-[#E8893A14] border border-[#E8893A40] p-4 rounded-2xl flex items-start gap-3 max-w-sm">
+              <Clock size={18} className="text-[#E8893A] mt-1 shrink-0" />
+              <p className="text-xs text-[#E8893A] font-medium leading-relaxed">
+                Producción artesanal a pedido. <br />Plazo despacho: <strong>10 días hábiles</strong>.
+              </p>
+            </div>
+          </div>
+          
+          <WholesaleQuickOrder products={products} />
+        </div>
+      </div>
+    )
+  }
+
+  // Otherwise show the landing page
   return (
     <div style={{ background: 'var(--bg-cream)', minHeight: '100vh' }}>
       <NavbarWrapper />
-
-      {/* Hero */}
+      {/* ... previous landing page content ... */}
       <div
         className="pt-28 pb-16 px-6 text-center relative overflow-hidden"
         style={{ background: 'var(--text-dark)' }}
@@ -34,7 +77,6 @@ export default function MayoristasPage() {
         </div>
       </div>
 
-      {/* Steps */}
       <div className="max-w-4xl mx-auto px-6 py-20">
         <h2 className="font-display text-3xl text-center mb-12" style={{ color: 'var(--text-dark)' }}>
           ¿Cómo funciona?
@@ -89,24 +131,6 @@ export default function MayoristasPage() {
           ))}
         </div>
 
-        {/* SLA note */}
-        <div
-          className="mt-12 rounded-2xl p-6 flex items-start gap-4"
-          style={{ background: 'rgba(232,137,58,0.08)', border: '1px solid rgba(232,137,58,0.25)' }}
-        >
-          <Clock size={20} style={{ color: 'var(--accent-orange)' }} className="shrink-0 mt-0.5" />
-          <div>
-            <p className="font-semibold text-sm mb-1" style={{ color: 'var(--accent-orange)' }}>
-              Producción artesanal bajo demanda
-            </p>
-            <p className="text-sm" style={{ color: 'var(--text-medium)' }}>
-              Los pedidos mayoristas tienen un plazo de <strong>10 días hábiles</strong> para producción y despacho.
-              Cada pieza es elaborada a mano específicamente para tu pedido.
-            </p>
-          </div>
-        </div>
-
-        {/* CTA */}
         <div className="text-center mt-16">
           <p className="mb-4 font-display text-2xl" style={{ color: 'var(--text-dark)' }}>
             ¿Listo para empezar?

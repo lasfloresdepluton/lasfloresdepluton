@@ -8,6 +8,11 @@ export type ProductWithVariants = Database['public']['Tables']['products']['Row'
   product_variants: (Database['public']['Tables']['product_variants']['Row'] & {
     fragrances: Database['public']['Tables']['fragrances']['Row'] | null
   })[]
+  wholesale_tiers: ProductWholesaleTier[]
+  is_wholesale_only: boolean
+  wholesale_category: string | null
+  min_qty_per_variant: number
+  image_url?: string | null
 }
 
 export interface Category {
@@ -43,7 +48,8 @@ export async function getProducts(categorySlug?: string, includeWholesale: boole
       product_variants (
         *,
         fragrances ( * )
-      )
+      ),
+      wholesale_tiers ( * )
     `)
     .eq('is_active', true)
 
@@ -117,4 +123,25 @@ export async function getUserRole(userId: string): Promise<UserProfile | null> {
     .eq('id', userId)
     .single()
   return data as UserProfile | null
+}
+
+// ── WHOLESALE TIERS ──────────────────────────────────────────────────────────
+
+export interface ProductWholesaleTier {
+  id: string
+  product_id: string
+  min_total_qty: number
+  fixed_total_price: number | null
+  unit_price: number | null
+  label: string | null
+}
+
+export async function getWholesaleTiers(productId: string): Promise<ProductWholesaleTier[]> {
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from('wholesale_tiers')
+    .select('*')
+    .eq('product_id', productId)
+    .order('min_total_qty', { ascending: true })
+  return (data ?? []) as ProductWholesaleTier[]
 }
