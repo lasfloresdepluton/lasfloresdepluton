@@ -2,7 +2,7 @@ import NavbarWrapper from '@/components/layout/NavbarWrapper'
 import Link from 'next/link'
 import { Store, Clock, Shield, MessageCircle, FileText } from 'lucide-react'
 import { getSession, getProfile } from '@/lib/auth/actions'
-import { getProducts } from '@/lib/products/actions'
+import { getWholesaleProducts, WholesaleProduct, getFragrances, Fragrance } from '@/lib/products/actions'
 import WholesaleQuickOrder from '@/components/shop/WholesaleQuickOrder'
 
 export default async function MayoristasPage() {
@@ -17,7 +17,10 @@ export default async function MayoristasPage() {
 
   // If verified wholesaler, show the quick order table
   if (isWholesaler) {
-    const products = await getProducts(undefined, true) // Include wholesale products
+    const [products, fragrances] = await Promise.all([
+      getWholesaleProducts(),
+      getFragrances()
+    ])
     return (
       <div style={{ background: '#F5F0E8', minHeight: '100vh' }}>
         <NavbarWrapper />

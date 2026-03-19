@@ -7,10 +7,16 @@ import type { AdminProduct } from '@/lib/admin/actions'
 import { formatPrice } from '@/utils/helpers'
 import { Loader2, Eye, EyeOff, Pencil } from 'lucide-react'
 
-export function ProductsTable({ products }: { products: AdminProduct[] }) {
+interface Props {
+  retailProducts: AdminProduct[]
+  wholesaleProducts: AdminProduct[]
+}
+
+export function ProductsTable({ retailProducts, wholesaleProducts }: Props) {
+  const [view, setView] = useState<'retail' | 'wholesale'>('retail')
+  const [isDeleting, setIsDeleting] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
   const [actionId, setActionId] = useState<string | null>(null)
-  const [view, setView] = useState<'retail' | 'wholesale'>('retail')
 
   function handleToggle(id: string, isActive: boolean) {
     setActionId(id)
@@ -20,9 +26,7 @@ export function ProductsTable({ products }: { products: AdminProduct[] }) {
     })
   }
 
-  const filtered = products.filter(p => 
-    view === 'retail' ? !p.is_wholesale_only : p.is_wholesale_only
-  )
+  const filtered = view === 'retail' ? retailProducts : wholesaleProducts
 
   return (
     <div className="space-y-4">
@@ -70,7 +74,7 @@ export function ProductsTable({ products }: { products: AdminProduct[] }) {
             </tr>
           </thead>
           <tbody>
-            {products.map((p) => {
+            {filtered.map((p) => {
               const isLoading = actionId === p.id && pending
               return (
                 <tr

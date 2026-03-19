@@ -160,6 +160,14 @@ export async function getAdminProducts(): Promise<AdminProduct[]> {
   return (data ?? []) as AdminProduct[]
 }
 
+export async function getAdminWholesaleProducts(): Promise<AdminProduct[]> {
+  const supabase = createAdminClient()
+  const { data } = await (supabase.from('wholesale_products') as any)
+    .select('*, categories(name)')
+    .order('name')
+  return (data ?? []) as any[]
+}
+
 export async function getAdminProduct(id: string): Promise<AdminProduct | null> {
   const supabase = createAdminClient()
   const { data } = await (supabase.from('products') as any)

@@ -136,6 +136,35 @@ export interface ProductWholesaleTier {
   label: string | null
 }
 
+export interface WholesaleProduct {
+  id: string
+  name: string
+  slug: string
+  description: string | null
+  retail_price: number
+  wholesale_price: number
+  min_qty_per_variant: number
+  wholesale_category: string | null
+  image_url: string | null
+  category_id: string | null
+}
+
+
+export async function getWholesaleProducts(): Promise<WholesaleProduct[]> {
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from('wholesale_products')
+    .select('*')
+    .eq('is_active', true)
+    .order('name')
+  
+  if (error) {
+    console.error('Error fetching wholesale products:', error)
+    return []
+  }
+  return data as WholesaleProduct[]
+}
+
 export async function getWholesaleTiers(productId: string): Promise<ProductWholesaleTier[]> {
   const supabase = await createClient()
   const { data } = await supabase

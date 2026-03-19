@@ -1,37 +1,38 @@
 import AdminShell from '@/components/admin/AdminShell'
-import { getAdminProducts } from '@/lib/admin/actions'
+import { getAdminProducts, getAdminWholesaleProducts } from '@/lib/admin/actions'
 import { ProductsTable } from '@/components/admin/ProductsTable'
 import { Package, Plus } from 'lucide-react'
 import Link from 'next/link'
 
 export default async function AdminProductsPage() {
-  const products = await getAdminProducts()
+  const [retailProducts, wholesaleProducts] = await Promise.all([
+    getAdminProducts(),
+    getAdminWholesaleProducts()
+  ])
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between flex-wrap gap-3">
+      <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center"
-            style={{ background: 'rgba(61,189,181,0.15)', color: '#3dbdb5' }}>
-            <Package size={20} />
+          <div className="w-12 h-12 bg-[#3dbdb5]/10 rounded-2xl flex items-center justify-center text-[#3dbdb5]">
+            <Package size={24} />
           </div>
           <div>
-            <h1 className="font-display text-2xl font-bold text-white">Productos</h1>
-            <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.8rem' }}>
-              {products.length} producto{products.length !== 1 ? 's' : ''}
-            </p>
+            <h1 className="text-2xl font-display font-black text-white">Productos</h1>
+            <p className="text-sm text-white/50">{retailProducts.length + wholesaleProducts.length} productos en total</p>
           </div>
         </div>
-        <Link
+        
+        <Link 
           href="/admin/productos/nuevo"
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold"
-          style={{ background: '#3dbdb5', color: 'white' }}
+          className="flex items-center gap-2 bg-[#3dbdb5] hover:bg-[#34a39c] text-white px-6 py-3 rounded-2xl font-bold transition-all shadow-lg shadow-[#3dbdb5]/20"
         >
-          <Plus size={16} /> Nuevo producto
+          <Plus size={20} />
+          NUEVO PRODUCTO
         </Link>
       </div>
 
-      <ProductsTable products={products} />
+      <ProductsTable retailProducts={retailProducts} wholesaleProducts={wholesaleProducts} />
     </div>
   )
 }
