@@ -8,7 +8,7 @@ import type { CartItem } from '@/store/cartStore'
 import type { ProductWithVariants } from '@/lib/products/actions'
 
 interface Props {
-  item: Partial<CartItem> // Support partial items for new additions
+  item: Partial<CartItem> 
   isWholesale: boolean
   onClose: () => void
   onSave: (newCounts: Record<string, number>, total: number, price: number) => void
@@ -21,7 +21,6 @@ export default function CartEditModal({ item, isWholesale, onClose, onSave }: Pr
 
   useEffect(() => {
     async function loadProduct() {
-      // If we don't have a slug, we might have an ID for old items or nothing.
       const slug = item.product_slug
       const id = item.product_id
 
@@ -35,7 +34,11 @@ export default function CartEditModal({ item, isWholesale, onClose, onSave }: Pr
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
       )
 
-      let query = supabase.from('products').select(`
+      // DETERMINING THE CORRECT TABLE (CRUCIAL FIX)
+      // Products in wholesale are in 'wholesale_products'
+      const table = isWholesale ? 'wholesale_products' : 'products'
+      
+      let query = supabase.from(table).select(`
           *,
           categories:category_id (id, name, slug),
           product_variants (
@@ -47,34 +50,49 @@ export default function CartEditModal({ item, isWholesale, onClose, onSave }: Pr
       if (slug) query = query.eq('slug', slug)
       else query = query.eq('id', id)
 
-      const { data, error } = await query.single()
+      const { data, error: queryError } = await query.single()
 
-      if (error || !data) {
-        console.error('Modal Load Error:', error)
-        setError("No pudimos cargar el producto. Intenta de nuevo.")
-        setTimeout(onClose, 2000)
-        return
+      if (queryError || !data) {
+        // Fallback: If not in the selected table, try the other table
+        const otherTable = isWholesale ? 'products' : 'wholesale_products'
+        const { data: fallbackData, error: fallbackError } = await supabase
+          .from(otherTable)
+          .select(`
+            *,
+            categories:category_id (id, name, slug),
+            product_variants (
+              id, fragrance_id, image_url, is_active,
+              fragrances:fragrance_id (*)
+            )
+          `)
+          .eq(slug ? 'slug' : 'id', slug || id)
+          .single()
+
+        if (fallbackError || !fallbackData) {
+          console.error('Modal Full Failure:', queryError, fallbackError)
+          setError("No pudimos encontrar el producto en el catálogo.")
+          setTimeout(onClose, 2500)
+          return
+        }
+        setProduct(fallbackData as any)
+      } else {
+        setProduct(data as any)
       }
-
-      setProduct(data as any)
+      
       setLoading(false)
     }
 
     loadProduct()
-  }, [item.product_slug, item.product_id, onClose])
+  }, [item.product_slug, item.product_id, isWholesale, onClose])
 
   const initialSelection = React.useMemo(() => {
     if (!item.selected_fragrances) return {}
     const counts: Record<string, number> = {}
     item.selected_fragrances.forEach(f => {
-      counts[fid_from_item(f)] = f.quantity
+      counts[f.id || (f as any).fragrance_id] = f.quantity
     })
     return counts
   }, [item.selected_fragrances])
-
-  function fid_from_item(f: any) {
-    return f.id || f.fragrance_id
-  }
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-10 bg-gray-900/60 backdrop-blur-md">
@@ -85,7 +103,7 @@ export default function CartEditModal({ item, isWholesale, onClose, onSave }: Pr
           <div>
             <h2 className="text-xl md:text-2xl font-black text-gray-900">Configurar Surtido</h2>
             <p className="text-xs font-black uppercase tracking-widest text-teal-600">
-               {loading ? 'Cargando producto...' : (product?.name || item.product_name)}
+               {loading ? 'Sincronizando...' : (product?.name || item.product_name)}
             </p>
           </div>
           <button onClick={onClose} className="p-3 bg-gray-50 rounded-2xl text-gray-400 hover:text-gray-900 transition-colors">
@@ -96,14 +114,14 @@ export default function CartEditModal({ item, isWholesale, onClose, onSave }: Pr
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6 md:p-10 bg-gray-50/30">
           {error ? (
-            <div className="h-64 flex flex-col items-center justify-center gap-4 text-orange-600">
-               <AlertCircle size={40} />
-               <p className="text-xs font-black uppercase tracking-widest">{error}</p>
+            <div className="h-64 flex flex-col items-center justify-center gap-4 text-orange-600 p-10 text-center">
+               <AlertCircle size={48} />
+               <p className="text-sm font-black uppercase tracking-widest leading-relaxed">{error}</p>
             </div>
           ) : loading ? (
             <div className="h-64 flex flex-col items-center justify-center gap-4 text-gray-400">
                <Loader2 size={40} className="animate-spin text-teal-500" />
-               <p className="text-xs font-black uppercase tracking-widest text-center">Iniciando editor artesanal...</p>
+               <p className="text-xs font-black uppercase tracking-widest text-center">Iniciando editor de packs...</p>
             </div>
           ) : product ? (
             <div className="max-w-2xl mx-auto">
@@ -121,7 +139,7 @@ export default function CartEditModal({ item, isWholesale, onClose, onSave }: Pr
         <div className="p-4 bg-teal-50 border-t border-teal-100 flex items-center justify-center gap-3">
            <Sparkles size={16} className="text-teal-600" />
            <p className="text-[10px] font-black uppercase tracking-widest text-teal-800">
-              {item.id === 'new' ? 'Se agregará como un nuevo ítem en tu pedido' : 'Tus cambios se aplicarán al confirmar'}
+              {item.id === 'new' ? 'Se agregará a tu pedido actual' : 'Tus cambios se aplicarán al confirmar el pack'}
            </p>
         </div>
       </div>

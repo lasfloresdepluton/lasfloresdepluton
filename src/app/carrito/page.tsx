@@ -11,7 +11,7 @@ import CartEditModal from '@/components/shop/CartEditModal'
 import type { ProductWithVariants } from '@/lib/products/actions'
 
 export default function CartPage() {
-  const { items, total, updateQuantity, removeItem, replaceItem, addItem, clearCart, is_wholesale } = useCartStore()
+  const { items, total, updateQuantity, removeItem, replaceItem, addItem, clearCart, is_wholesale, setWholesale } = useCartStore()
   const [mounted, setMounted] = useState(false)
   const [editingItem, setEditingItem] = useState<string | null>(null)
   const [upsellProducts, setUpsellProducts] = useState<any[]>([])
@@ -19,10 +19,26 @@ export default function CartPage() {
   // Modal for adding NEW products from upsell
   const [quickAddSlug, setQuickAddSlug] = useState<string | null>(null)
 
+  // FORCE DETECTION of mode based on cart content
+  const currentActualIsWholesale = useMemo(() => {
+    // If ANY item in cart has "may-" in its slug or if the store says so
+    const hasWholesaleSlugs = items.some(i => i.product_slug?.startsWith('may-'))
+    return hasWholesaleSlugs || is_wholesale
+  }, [items, is_wholesale])
+
   useEffect(() => {
     setMounted(true)
-    
-    // Fetch upselling products (Based on current profile)
+
+    // Sync store state if content implies wholesale
+    if (items.some(i => i.product_slug?.startsWith('may-')) && !is_wholesale) {
+       setWholesale(true)
+    }
+  }, [items, is_wholesale, setWholesale])
+
+  useEffect(() => {
+    if (!mounted) return
+
+    // Fetch upselling products (Based on current actual profile)
     async function loadUpsell() {
       const supabase = createBrowserClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -30,8 +46,7 @@ export default function CartPage() {
       )
 
       // Query table based on wholesale status
-      // NOTE: Retail uses 'products', Wholesale uses 'wholesale_products' 
-      const table = is_wholesale ? 'wholesale_products' : 'products'
+      const table = currentActualIsWholesale ? 'wholesale_products' : 'products'
       
       const { data } = await supabase
         .from(table)
@@ -44,17 +59,17 @@ export default function CartPage() {
           )
         `)
         .eq('is_active', true)
+        .order('name')
         .limit(4)
 
       if (data) {
-        // Find existing IDs to avoid recommending what's already in cart
         const inCartIds = items.map(i => i.product_id)
         const filtered = data.filter((p: any) => !inCartIds.includes(p.id))
         setUpsellProducts(filtered)
       }
     }
     loadUpsell()
-  }, [is_wholesale, items])
+  }, [currentActualIsWholesale, items, mounted])
 
   const currentEditingItem = useMemo(() => {
     return items.find(i => i.id === editingItem) || null
@@ -64,7 +79,6 @@ export default function CartPage() {
     if (!currentEditingItem) return
 
     const selectedFragrances = Object.entries(newCounts).map(([fid, qty]) => {
-      // Find from existing item or we preserve name from existing one
       const oldF = currentEditingItem.selected_fragrances?.find(f => (f.id === fid || (f as any).fragrance_id === fid))
       return {
         id: fid,
@@ -140,7 +154,7 @@ export default function CartPage() {
               <h1 className="text-5xl font-black text-gray-900 tracking-tighter">Tu Pedido</h1>
               <p className="text-xs font-black uppercase tracking-[0.2em] text-teal-600 mt-2 flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-teal-500 animate-pulse" />
-                {is_wholesale ? 'Acceso Mayorista' : 'Acceso Minorista'}
+                {currentActualIsWholesale ? 'Perfil Mayorista' : 'Perfil Minorista'}
               </p>
             </div>
             <button 
@@ -171,22 +185,17 @@ export default function CartPage() {
                   <div>
                     <div className="flex justify-between items-start">
                       <div className="space-y-1">
-                        <p className="text-[10px] font-black uppercase tracking-widest text-teal-500">
-                          {item.is_pack ? `PACK ${item.pack_size}u` : 'PRODUCTO'}
-                        </p>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-teal-500">{item.is_pack ? `PACK ${item.pack_size}u` : 'PRODUCTO'}</p>
                         <h3 className="text-2xl font-black text-gray-900 leading-tight">{item.product_name}</h3>
                       </div>
                       <div className="flex gap-2">
-                        {/* THE EDIT BUTTON - NOW ALWAYS VISIBLE IF ID EXISTS */}
-                        {(item.product_slug || item.product_id) && (
-                          <button 
-                            onClick={() => setEditingItem(item.id)}
-                            className="p-3 bg-gray-50 rounded-2xl text-gray-400 hover:text-teal-600 hover:bg-teal-50 transition-all font-bold text-xs"
-                            title="Editar surtido"
-                          >
-                            <Edit2 size={18} />
-                          </button>
-                        )}
+                        <button 
+                          onClick={() => setEditingItem(item.id)}
+                          className="p-3 bg-gray-50 rounded-2xl text-gray-400 hover:text-teal-600 hover:bg-teal-50 transition-all font-bold text-xs"
+                          title="Editar surtido"
+                        >
+                          <Edit2 size={18} />
+                        </button>
                         <button 
                           onClick={() => removeItem(item.id)}
                           className="p-3 bg-gray-50 rounded-2xl text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all"
@@ -240,25 +249,21 @@ export default function CartPage() {
           {upsellProducts.length > 0 && (
             <div className="pt-20 space-y-8">
                <div className="flex items-center gap-4">
-                  <h3 className="text-xl font-black text-gray-900 whitespace-nowrap">Completa tu {is_wholesale ? 'Stock' : 'Ritual'}</h3>
+                  <h3 className="text-xl font-black text-gray-900 whitespace-nowrap">Completa tu {currentActualIsWholesale ? 'Stock' : 'Ritual'}</h3>
                   <div className="h-px bg-gray-100 flex-1" />
                </div>
-               <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+               <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
                   {upsellProducts.map(p => {
-                    const displayPrice = is_wholesale ? (p.wholesale_price || p.retail_price) : (p.retail_price || p.wholesale_price)
+                    const price = currentActualIsWholesale ? (p.wholesale_price || p.retail_price) : (p.retail_price || p.wholesale_price)
                     return (
                       <div key={p.id} className="group flex flex-col items-center text-center space-y-4">
                          <Link href={`/productos/${p.slug}`} className="relative w-full aspect-square rounded-[2rem] overflow-hidden bg-gray-50 shadow-sm border border-gray-100 group-hover:shadow-lg transition-all">
                             {p.image_url ? <Image src={p.image_url} alt={p.name} fill className="object-cover group-hover:scale-110 transition-transform duration-700" /> : <div className="w-full h-full flex items-center justify-center text-4xl">🌿</div>}
                          </Link>
                          <div className="flex-1 w-full px-2">
-                            <p className="text-[9px] font-black uppercase text-teal-600 tracking-widest mb-1">
-                               {p.categories?.name || (is_wholesale ? 'Mayorista' : 'Retail')}
-                            </p>
+                            <p className="text-[9px] font-black uppercase text-teal-600 tracking-widest mb-1">{p.categories?.name || (currentActualIsWholesale ? 'Mayorista' : 'Catálogo')}</p>
                             <h4 className="text-xs font-black text-gray-900 group-hover:text-teal-600 transition-colors line-clamp-1">{p.name}</h4>
-                            <p className="text-[10px] font-bold text-gray-400">
-                               {displayPrice ? formatPrice(displayPrice) : 'Consultar'}
-                            </p>
+                            <p className="text-[10px] font-bold text-gray-400">{formatPrice(price)}</p>
                          </div>
                          <button 
                            onClick={() => setQuickAddSlug(p.slug)}
@@ -331,7 +336,7 @@ export default function CartPage() {
       {editingItem && currentEditingItem && (
         <CartEditModal 
           item={currentEditingItem}
-          isWholesale={is_wholesale}
+          isWholesale={currentActualIsWholesale}
           onClose={() => setEditingItem(null)}
           onSave={handleSaveEdit}
         />
@@ -341,7 +346,7 @@ export default function CartPage() {
       {quickAddSlug && (
         <CartEditModal 
           item={{ product_slug: quickAddSlug, product_name: 'Cargando...', id: 'new', product_id: 'new', quantity: 1, unit_price: 0 }}
-          isWholesale={is_wholesale}
+          isWholesale={currentActualIsWholesale}
           onClose={() => setQuickAddSlug(null)}
           onSave={(counts, totalQty, totalPrice) => {
              const p = upsellProducts.find(up => up.slug === quickAddSlug)
