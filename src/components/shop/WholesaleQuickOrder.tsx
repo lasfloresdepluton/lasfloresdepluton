@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { ShoppingCart, Wand2, Plus, Minus, X, Check, AlertCircle } from 'lucide-react';
+import { ShoppingCart, Wand2, Plus, Minus, X, Check, Info, AlertCircle } from 'lucide-react';
 import { useCartStore } from '@/store/cartStore';
 import { WholesaleProduct, Fragrance } from '@/lib/products/actions';
 import Image from 'next/image';
+import { formatPrice } from '@/utils/helpers';
 
 interface Props {
   products: WholesaleProduct[];
@@ -54,7 +55,7 @@ export default function WholesaleQuickOrder({ products, fragrances }: Props) {
     });
   };
 
-  const calculateProductTotal = (productId: string) => {
+  const calculateProductTotalUnits = (productId: string) => {
     const productQtys = quantities[productId] || {};
     return Object.values(productQtys).reduce((sum, q) => sum + q, 0);
   };
@@ -82,17 +83,15 @@ export default function WholesaleQuickOrder({ products, fragrances }: Props) {
   };
 
   const handleAddToCart = (product: WholesaleProduct) => {
-    const totalQty = calculateProductTotal(product.id);
-    const isValid = product.is_exact_total 
-      ? totalQty === (product.min_total_qty || 1)
-      : totalQty >= (product.min_total_qty || 1);
+    const totalQty = calculateProductTotalUnits(product.id);
+    const target = (product.min_total_qty || 1);
+    const isComplete = product.is_exact_total ? totalQty === target : totalQty >= target;
     
-    if (!isValid) return;
+    if (!isComplete) return;
 
     setWholesale(true);
     const productQtys = quantities[product.id] || {};
     
-    // Map selections to the new structured SelectedFragrance array
     const selectedFragrances = Object.entries(productQtys)
       .filter(([_, qty]) => qty > 0)
       .map(([fragId, qty]) => {
@@ -106,18 +105,16 @@ export default function WholesaleQuickOrder({ products, fragrances }: Props) {
 
     if (selectedFragrances.length === 0) return;
 
-    // Calculate effective price. If it's wholesale, price is often per unit but we display pack total.
-    // In our DB, wholesale_price IS the pack price for min_total_qty.
-    // So unit price is wholesale_price / min_total_qty.
-    const unitPrice = product.wholesale_price / (product.min_total_qty || 1);
-    const totalPrice = unitPrice * totalQty;
+    // Standard Logic: wholesale_price is for target units
+    const unitPrice = product.wholesale_price / target;
+    const totalPriceOfSelection = unitPrice * totalQty;
 
     addItem({
       product_id: product.id,
       product_name: product.name,
       image_url: (product as any).image_url || undefined,
-      quantity: 1, // Adding as 1 logical selection/pack
-      unit_price: totalPrice,
+      quantity: 1, 
+      unit_price: totalPriceOfSelection,
       is_pack: true,
       pack_size: totalQty,
       selected_fragrances: selectedFragrances
@@ -140,10 +137,11 @@ export default function WholesaleQuickOrder({ products, fragrances }: Props) {
 
           <div className="divide-y divide-gray-50">
             {catProducts.map((product) => {
-              const totalQty = calculateProductTotal(product.id);
+              const totalQty = calculateProductTotalUnits(product.id);
               const target = product.min_total_qty || 1;
               const isComplete = product.is_exact_total ? totalQty === target : totalQty >= target;
               const diff = target - totalQty;
+              const unitPrice = product.wholesale_price / target;
 
               return (
                 <div key={product.id} className="p-8 lg:p-10">
@@ -155,12 +153,13 @@ export default function WholesaleQuickOrder({ products, fragrances }: Props) {
                         </div>
                         <div>
                           <h3 className="font-display text-xl font-bold text-gray-900 leading-tight mb-1">{product.name}</h3>
-                          <div className="flex flex-wrap items-center gap-2">
-                             <span className="text-sm font-black text-teal-600">
-                               $ {(product.wholesale_price / target).toFixed(2)} c/u
+                          <div className="flex flex-col">
+                             <span className="text-xl font-black text-teal-600">
+                               {formatPrice(product.wholesale_price / (product.is_exact_total ? 1 : (target/totalQty || 1)))} 
+                               <span className="text-[10px] text-gray-400 ml-2 font-black uppercase tracking-widest">Base Pack</span>
                              </span>
-                             <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest bg-gray-100 px-2 py-0.5 rounded">
-                               Min. {target}u
+                             <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">
+                               ({formatPrice(unitPrice)} c/u) • Mín. {target}u
                              </span>
                           </div>
                         </div>
@@ -237,7 +236,11 @@ export default function WholesaleQuickOrder({ products, fragrances }: Props) {
                         })}
                       </div>
 
-                      <div className="mt-8 flex items-center justify-end">
+                      <div className="mt-8 flex items-center justify-between">
+                        <div className="text-left">
+                           <p className="text-[10px] font-black uppercase text-gray-400">Total selección</p>
+                           <p className="text-2xl font-black text-teal-600">{formatPrice(unitPrice * totalQty)}</p>
+                        </div>
                         <button 
                           onClick={() => handleAddToCart(product)}
                           disabled={!isComplete}

@@ -11,7 +11,7 @@ interface DraftPack {
   id: string
   counts: Record<string, number>
   totalUnits: number
-  pricePerPack: number
+  priceOfThisPack: number
 }
 
 interface FragranceSelectorProps {
@@ -35,7 +35,10 @@ export default function FragranceSelector({ product, isWholesale = false }: Frag
       .find(t => selectedPackSize >= t.min_total_qty)
   }, [isWholesale, hasTiers, product.wholesale_tiers, selectedPackSize])
 
-  const activePrice = currentTier ? (currentTier as any).wholesale_price : (isWholesale ? product.wholesale_price : product.retail_price)
+  const basePrice = currentTier ? (currentTier as any).wholesale_price : (isWholesale ? product.wholesale_price : product.retail_price)
+  const baseQty = isWholesale ? (currentTier?.min_total_qty || product.min_total_qty || 1) : (product.pack_slots || 1)
+  const unitPrice = basePrice / baseQty
+
   const activeVariants = product.product_variants.filter((v) => v.is_active)
   
   // 2. STATE
@@ -49,20 +52,29 @@ export default function FragranceSelector({ product, isWholesale = false }: Frag
   const packSlots = isWholesale ? selectedPackSize : (product.pack_slots || 0)
   const totalSelected = Object.values(packCounts).reduce((s, n) => s + n, 0)
   const remaining = packSlots - totalSelected
-  const packComplete = remaining === 0
+  // For wholesale, if it's NOT exact total, we can add MORE than min
+  const packComplete = product.is_exact_total ? remaining === 0 : totalSelected >= (product.min_total_qty || 1)
 
   const displayImage = product.is_pack
     ? activeVariants[0]?.image_url ?? null
     : (activeVariants.find(v => v.id === selectedVariantId)?.image_url ?? null)
 
+  // Calculate current dynamic price
+  const currentTotal = unitPrice * totalSelected
+
   // Handlers
   function clickFragrance(fragId: string) {
-    if (remaining <= 0) return
+    // If exact total, respect packSlots. Otherwise, always allow adding.
+    if (product.is_exact_total && remaining <= 0) return
+    
     setPackCounts((prev) => {
       const current = prev[fragId] || 0
       const jump = product.min_qty_per_variant || 1
       let next = current + 1
-      if (current === 0 && jump > 1) next = Math.min(jump, remaining)
+      if (current === 0 && jump > 1) {
+         // Respect exact total limit even in jump
+         next = product.is_exact_total ? Math.min(jump, remaining) : jump
+      }
       return { ...prev, [fragId]: next }
     })
   }
@@ -84,11 +96,11 @@ export default function FragranceSelector({ product, isWholesale = false }: Frag
   function confirmPackAndAddAnother() {
     setErrorMsg(null)
     if (!packComplete) {
-      setErrorMsg(`Completá las ${remaining} unidades restantes para guardar este pack.`)
+      setErrorMsg(`Mínimo ${product.min_total_qty || product.pack_slots} unidades para guardar este pack.`)
       return
     }
 
-    const minViolation = Object.entries(packCounts).find(([_, count]) => count > 0 && count < (product.min_qty_per_variant || 0))
+    const minViolation = Object.entries(packCounts).find(([_, count]) => count > 0 && count < (product.min_qty_per_variant || 1))
     if (minViolation) {
       setErrorMsg(`Mínimo ${product.min_qty_per_variant} unidades por fragancia.`)
       return
@@ -98,7 +110,7 @@ export default function FragranceSelector({ product, isWholesale = false }: Frag
       id: Math.random().toString(36).substr(2, 9),
       counts: { ...packCounts },
       totalUnits: totalSelected,
-      pricePerPack: activePrice
+      priceOfThisPack: currentTotal
     }
 
     setDraftPacks(prev => [...prev, newDraft])
@@ -126,7 +138,7 @@ export default function FragranceSelector({ product, isWholesale = false }: Frag
           id: 'current',
           counts: packCounts,
           totalUnits: totalSelected,
-          pricePerPack: activePrice
+          priceOfThisPack: currentTotal
         })
       } else {
         setErrorMsg("Tienes una selección incompleta. Completala o borrala antes de finalizar.")
@@ -139,7 +151,6 @@ export default function FragranceSelector({ product, isWholesale = false }: Frag
     setWholesale(isWholesale)
     
     allPacks.forEach(pack => {
-      // Map current counts to the structured SelectedFragrance array
       const selectedFragrances = Object.entries(pack.counts).map(([fid, qty]) => {
          const v = activeVariants.find(v => v.fragrance_id === fid || v.id === fid)
          return {
@@ -153,8 +164,8 @@ export default function FragranceSelector({ product, isWholesale = false }: Frag
         product_id: product.id,
         product_name: product.name,
         image_url: (displayImage as any) ?? undefined,
-        quantity: 1, // We add each logical "Pack" as 1 quantity unit
-        unit_price: pack.pricePerPack,
+        quantity: 1, 
+        unit_price: pack.priceOfThisPack,
         is_pack: true,
         pack_size: pack.totalUnits,
         selected_fragrances: selectedFragrances
@@ -178,28 +189,51 @@ export default function FragranceSelector({ product, isWholesale = false }: Frag
         )}
       </div>
 
+      {/* WHOLESALE PACK SELECTOR (If tiers exist) */}
+      {isWholesale && hasTiers && (
+        <div className="flex gap-3">
+           <button 
+             onClick={() => { setSelectedPackSize(100); setPackCounts({}); }}
+             className={`flex-1 p-4 rounded-2xl border-2 transition-all ${selectedPackSize === 100 ? 'border-teal-500 bg-teal-50/30' : 'border-gray-100 bg-white'}`}
+           >
+              <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Pack x 100</p>
+              <p className="text-lg font-black text-gray-900">{formatPrice(product.wholesale_price || 0)}</p>
+           </button>
+           <button 
+             onClick={() => { setSelectedPackSize(500); setPackCounts({}); }}
+             className={`flex-1 p-4 rounded-2xl border-2 transition-all relative overflow-hidden ${selectedPackSize === 500 ? 'border-teal-500 bg-teal-50/30' : 'border-gray-100 bg-white'}`}
+           >
+              <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Pack x 500</p>
+              <p className="text-lg font-black text-gray-900">{formatPrice((product.wholesale_tiers.find(t=>t.min_total_qty===500) as any)?.wholesale_price || 0)}</p>
+           </button>
+        </div>
+      )}
+
       {/* Main Builder Section */}
       <div className="bg-white p-6 md:p-8 rounded-[2.5rem] border border-gray-100 shadow-sm space-y-6">
         <div className="flex justify-between items-baseline">
            <h2 className="text-xl font-black text-gray-900">Armá tu Surtido</h2>
-           <span className="text-2xl font-black text-teal-600">{formatPrice(activePrice)}</span>
+           <div className="text-right">
+              <span className="text-2xl font-black text-teal-600 block">{formatPrice(currentTotal || basePrice)}</span>
+              {isWholesale && (
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">({formatPrice(unitPrice)} c/u)</span>
+              )}
+           </div>
         </div>
 
         {/* Progress Bar */}
-        {(product.is_pack || isWholesale) && (
-           <div className="space-y-2">
-              <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-gray-400">
-                 <span>Progreso del pack</span>
-                 <span className={packComplete ? 'text-teal-600' : 'text-gray-900'}>{totalSelected} / {packSlots} u.</span>
-              </div>
-              <div className="h-3 w-full bg-gray-50 rounded-full overflow-hidden p-0.5">
-                 <div 
-                   className="h-full bg-teal-500 rounded-full transition-all duration-500"
-                   style={{ width: `${Math.min(100, (totalSelected/packSlots)*100)}%` }}
-                 />
-              </div>
-           </div>
-        )}
+        <div className="space-y-2">
+            <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-gray-400">
+                <span>Unidades seleccionadas</span>
+                <span className={packComplete ? 'text-teal-600' : 'text-gray-900'}>{totalSelected} {product.is_exact_total ? `/ ${packSlots}` : 'u.'}</span>
+            </div>
+            <div className="h-3 w-full bg-gray-50 rounded-full overflow-hidden p-0.5">
+                <div 
+                  className="h-full bg-teal-500 rounded-full transition-all duration-500"
+                  style={{ width: `${Math.min(100, (totalSelected / (packSlots || 1)) * 100)}%` }}
+                />
+            </div>
+        </div>
 
         {/* Fragrance Grid */}
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 py-2">
@@ -236,7 +270,7 @@ export default function FragranceSelector({ product, isWholesale = false }: Frag
             packComplete ? 'bg-teal-500 text-white shadow-lg shadow-teal-100 hover:bg-teal-600' : 'bg-gray-100 text-gray-400'
           }`}
         >
-          {packComplete ? '✓ Confirmar este pack y armar otro' : `Faltan ${remaining} unidades`}
+          {packComplete ? '✓ Confirmar este pack y armar otro' : `Faltan unidades`}
         </button>
       </div>
 
@@ -252,12 +286,7 @@ export default function FragranceSelector({ product, isWholesale = false }: Frag
                    </div>
                    <div className="flex-1 min-w-0">
                       <p className="text-sm font-black text-gray-900 truncate">Pack de {pack.totalUnits} unidades</p>
-                      <p className="text-[10px] text-gray-500 truncate">
-                        {Object.entries(pack.counts).map(([fid, count]) => {
-                           const v = activeVariants.find(v => v.fragrance_id === fid)
-                           return `${v?.fragrances?.name} x${count}`
-                        }).join(', ')}
-                      </p>
+                      <p className="text-[10px] text-teal-600 font-bold">{formatPrice(pack.priceOfThisPack)} total</p>
                    </div>
                    <div className="flex gap-2">
                       <button 

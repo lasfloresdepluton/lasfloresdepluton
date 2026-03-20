@@ -18,6 +18,8 @@ export default function ProductCard({ product, isWholesale = false }: ProductCar
   const [added, setAdded] = useState(false)
 
   const price = isWholesale ? product.wholesale_price : product.retail_price
+  const minQty = product.min_total_qty || product.pack_slots || 1
+  const unitPrice = isWholesale ? (price / minQty) : (product.retail_price)
 
   // First active variant with image, or any active variant
   const firstVariant = product.product_variants.find((v) => v.is_active && v.image_url)
@@ -70,7 +72,7 @@ export default function ProductCard({ product, isWholesale = false }: ProductCar
 
         {/* Badges */}
         <div className="absolute top-4 left-4 flex flex-col gap-2">
-          {product.is_pack && (
+          {(product.is_pack || isWholesale) && (
             <span className="bg-teal-500 text-white px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest shadow-lg flex items-center gap-1.5">
               <Sparkles size={12} /> Pack
             </span>
@@ -91,9 +93,16 @@ export default function ProductCard({ product, isWholesale = false }: ProductCar
               {product.name}
             </h3>
           </Link>
-          <span className="font-black text-xl text-teal-600 shrink-0">
-            {formatPrice(price)}
-          </span>
+          <div className="text-right shrink-0">
+            <span className="font-black text-xl text-teal-600 block">
+              {formatPrice(price)}
+            </span>
+            {isWholesale && minQty > 1 && (
+              <span className="text-[10px] font-bold text-gray-400 block uppercase">
+                ({formatPrice(unitPrice)} c/u)
+              </span>
+            )}
+          </div>
         </div>
 
         {product.categories && (
@@ -115,7 +124,7 @@ export default function ProductCard({ product, isWholesale = false }: ProductCar
         )}
 
         <div className="mt-auto">
-          {product.is_pack ? (
+          {(product.is_pack || isWholesale) ? (
             <Link
               href={`/productos/${product.slug}`}
               className="w-full py-4 flex items-center justify-center gap-3 bg-teal-500 text-white rounded-2xl text-xs font-black uppercase tracking-widest shadow-lg hover:bg-teal-600 transition-colors"
