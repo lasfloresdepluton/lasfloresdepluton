@@ -30,6 +30,7 @@ export default function CartPage() {
       )
 
       // Query table based on wholesale status
+      // NOTE: Retail uses 'products', Wholesale uses 'wholesale_products' 
       const table = is_wholesale ? 'wholesale_products' : 'products'
       
       const { data } = await supabase
@@ -63,10 +64,8 @@ export default function CartPage() {
     if (!currentEditingItem) return
 
     const selectedFragrances = Object.entries(newCounts).map(([fid, qty]) => {
-      // Find from existing item or we can also get names if we had the full product list handy
-      // For now, names from FragranceSelector onConfirm is better if I update it, but
-      // I'll stick to preserving names.
-      const oldF = currentEditingItem.selected_fragrances?.find(f => f.id === fid)
+      // Find from existing item or we preserve name from existing one
+      const oldF = currentEditingItem.selected_fragrances?.find(f => (f.id === fid || (f as any).fragrance_id === fid))
       return {
         id: fid,
         name: oldF?.name || 'Fragancia',
@@ -141,7 +140,7 @@ export default function CartPage() {
               <h1 className="text-5xl font-black text-gray-900 tracking-tighter">Tu Pedido</h1>
               <p className="text-xs font-black uppercase tracking-[0.2em] text-teal-600 mt-2 flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-teal-500 animate-pulse" />
-                {is_wholesale ? 'Perfil Mayorista' : 'Perfil Minorista'}
+                {is_wholesale ? 'Acceso Mayorista' : 'Acceso Minorista'}
               </p>
             </div>
             <button 
@@ -172,11 +171,14 @@ export default function CartPage() {
                   <div>
                     <div className="flex justify-between items-start">
                       <div className="space-y-1">
-                        <p className="text-[10px] font-black uppercase tracking-widest text-teal-500">{item.is_pack ? `PACK ${item.pack_size}u` : 'PRODUCTO'}</p>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-teal-500">
+                          {item.is_pack ? `PACK ${item.pack_size}u` : 'PRODUCTO'}
+                        </p>
                         <h3 className="text-2xl font-black text-gray-900 leading-tight">{item.product_name}</h3>
                       </div>
                       <div className="flex gap-2">
-                        {item.product_slug && (
+                        {/* THE EDIT BUTTON - NOW ALWAYS VISIBLE IF ID EXISTS */}
+                        {(item.product_slug || item.product_id) && (
                           <button 
                             onClick={() => setEditingItem(item.id)}
                             className="p-3 bg-gray-50 rounded-2xl text-gray-400 hover:text-teal-600 hover:bg-teal-50 transition-all font-bold text-xs"
@@ -242,24 +244,31 @@ export default function CartPage() {
                   <div className="h-px bg-gray-100 flex-1" />
                </div>
                <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
-                  {upsellProducts.map(p => (
-                    <div key={p.id} className="group flex flex-col items-center text-center space-y-4">
-                       <Link href={`/productos/${p.slug}`} className="relative w-full aspect-square rounded-[2rem] overflow-hidden bg-gray-50 shadow-sm border border-gray-100 group-hover:shadow-lg transition-all">
-                          {p.image_url ? <Image src={p.image_url} alt={p.name} fill className="object-cover group-hover:scale-110 transition-transform duration-700" /> : <div className="w-full h-full flex items-center justify-center text-4xl">🌿</div>}
-                       </Link>
-                       <div className="flex-1 w-full px-2">
-                          <p className="text-[9px] font-black uppercase text-teal-600 tracking-widest mb-1">{p.categories?.name || (is_wholesale ? 'Distribución' : 'Catálogo')}</p>
-                          <h4 className="text-xs font-black text-gray-900 group-hover:text-teal-600 transition-colors line-clamp-1">{p.name}</h4>
-                          <p className="text-[10px] font-bold text-gray-400">{formatPrice(is_wholesale ? p.wholesale_price : p.retail_price)}</p>
-                       </div>
-                       <button 
-                         onClick={() => setQuickAddSlug(p.slug)}
-                         className="w-full py-3 rounded-2xl bg-teal-500 text-white text-[10px] font-black uppercase tracking-widest hover:bg-teal-600 active:scale-95 transition-all flex items-center justify-center gap-2 translate-y-3 opacity-0 group-hover:translate-y-0 group-hover:opacity-100"
-                       >
-                          <PlusCircle size={14} /> Añadir rápido
-                       </button>
-                    </div>
-                  ))}
+                  {upsellProducts.map(p => {
+                    const displayPrice = is_wholesale ? (p.wholesale_price || p.retail_price) : (p.retail_price || p.wholesale_price)
+                    return (
+                      <div key={p.id} className="group flex flex-col items-center text-center space-y-4">
+                         <Link href={`/productos/${p.slug}`} className="relative w-full aspect-square rounded-[2rem] overflow-hidden bg-gray-50 shadow-sm border border-gray-100 group-hover:shadow-lg transition-all">
+                            {p.image_url ? <Image src={p.image_url} alt={p.name} fill className="object-cover group-hover:scale-110 transition-transform duration-700" /> : <div className="w-full h-full flex items-center justify-center text-4xl">🌿</div>}
+                         </Link>
+                         <div className="flex-1 w-full px-2">
+                            <p className="text-[9px] font-black uppercase text-teal-600 tracking-widest mb-1">
+                               {p.categories?.name || (is_wholesale ? 'Mayorista' : 'Retail')}
+                            </p>
+                            <h4 className="text-xs font-black text-gray-900 group-hover:text-teal-600 transition-colors line-clamp-1">{p.name}</h4>
+                            <p className="text-[10px] font-bold text-gray-400">
+                               {displayPrice ? formatPrice(displayPrice) : 'Consultar'}
+                            </p>
+                         </div>
+                         <button 
+                           onClick={() => setQuickAddSlug(p.slug)}
+                           className="w-full py-3 rounded-2xl bg-teal-500 text-white text-[10px] font-black uppercase tracking-widest hover:bg-teal-600 active:scale-95 transition-all flex items-center justify-center gap-2 translate-y-3 opacity-0 group-hover:translate-y-0 group-hover:opacity-100"
+                         >
+                            <PlusCircle size={14} /> Añadir rápido
+                         </button>
+                      </div>
+                    )
+                  })}
                </div>
             </div>
           )}
@@ -335,10 +344,6 @@ export default function CartPage() {
           isWholesale={is_wholesale}
           onClose={() => setQuickAddSlug(null)}
           onSave={(counts, totalQty, totalPrice) => {
-             // We need the product name/data. The modal can provide it or we fetch it here.
-             // I'll update the modal to provide the full product object on confirm.
-             // Actually, the modal already calls onSave with just counts.
-             // I'll fetch it in handleQuickAddItem by finding it in upsellProducts or in the modal itself.
              const p = upsellProducts.find(up => up.slug === quickAddSlug)
              if (p) handleQuickAddItem(p, counts, totalQty, totalPrice)
           }}
