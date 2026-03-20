@@ -65,18 +65,16 @@ export interface UserProfile {
 }
 
 export async function getProducts(categorySlug?: string, includeWholesale: boolean = false): Promise<ProductWithVariants[]> {
-  // Use Admin Client to rule out RLS issues completely
   const supabase = createAdminClient()
+  console.log(`[DEBUG] getProducts called - includeWholesale: ${includeWholesale}, categorySlug: ${categorySlug}`);
 
   if (includeWholesale) {
-    // Fetch from wholesale_products
     let query = supabase
       .from('wholesale_products')
       .select(`
         *,
         categories ( id, name, slug )
       `)
-      // .eq('is_active', true)
 
     if (categorySlug) {
       const { data: cat } = await supabase.from('categories').select('id').eq('slug', categorySlug).single()
@@ -85,11 +83,11 @@ export async function getProducts(categorySlug?: string, includeWholesale: boole
 
     const { data, error } = await query.order('name')
     if (error) {
-      console.error('getProducts (wholesale) error:', error)
+      console.error('[DEBUG] getProducts (wholesale) error:', error)
       return []
     }
 
-    // Map to ProductWithVariants format
+    console.log(`[DEBUG] getProducts (wholesale) found ${data?.length || 0} items`);
     return (data || []).map((p: any) => ({
       ...p,
       product_variants: [],
@@ -116,19 +114,22 @@ export async function getProducts(categorySlug?: string, includeWholesale: boole
       ),
       wholesale_tiers (*)
     `)
-    // .eq('is_active', true)
 
   if (categorySlug) {
     const { data: cat } = await supabase.from('categories').select('id').eq('slug', categorySlug).single()
-    if (cat) query = query.eq('category_id', (cat as any).id)
+    if (cat) {
+       console.log(`[DEBUG] Filtering by category ID: ${(cat as any).id}`);
+       query = query.eq('category_id', (cat as any).id)
+    }
   }
 
   const { data, error } = await query.order('name')
   if (error) {
-    console.error('getProducts (retail) error:', error)
+    console.error('[DEBUG] getProducts (retail) error:', error)
     return []
   }
 
+  console.log(`[DEBUG] getProducts (retail) found ${data?.length || 0} items`);
   return (data ?? []).map((p: any) => ({
     ...p,
     is_wholesale_only: false,
@@ -155,7 +156,6 @@ export async function getProductBySlug(slug: string): Promise<ProductWithVariant
       wholesale_tiers (*)
     `)
     .eq('slug', slug)
-    // .eq('is_active', true)
     .single()
 
   if (retail) {
@@ -173,19 +173,16 @@ export async function getProductBySlug(slug: string): Promise<ProductWithVariant
       categories ( id, name, slug )
     `)
     .eq('slug', slug)
-    // .eq('is_active', true)
     .single()
 
   if (wholesale) {
      const w = wholesale as any
-     // Fetch tiers for wholesale
      const { data: tiers } = await supabase
        .from('wholesale_tiers')
        .select('*')
        .eq('product_id', w.id)
        .order('min_total_qty', { ascending: true })
 
-     // Fetch all active fragrances to create synthetic variants for the pack builder
      const { data: fragrances } = await supabase
        .from('fragrances')
        .select('*')
@@ -209,7 +206,7 @@ export async function getProductBySlug(slug: string): Promise<ProductWithVariant
        product_variants: syntheticVariants,
        wholesale_tiers: tiers || [],
        wholesale_price: w.wholesale_price,
-       min_qty_per_variant: w.min_qty_per_variant || 1 // Fallback
+       min_qty_per_variant: w.min_qty_per_variant || 1
      } as any
   }
 
