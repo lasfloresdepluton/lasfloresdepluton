@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useMemo } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
-import { ShoppingBag, ArrowLeft, Trash2, Plus, Minus, CreditCard, ShoppingCart, Edit2, Sparkles, Wand2 } from 'lucide-react'
+import { ShoppingBag, ArrowLeft, Trash2, Plus, Minus, CreditCard, ShoppingCart, Edit2, Sparkles, Wand2, PlusCircle, CheckCircle2 } from 'lucide-react'
 import { useCartStore } from '@/store/cartStore'
 import { formatPrice } from '@/utils/helpers'
 import { createBrowserClient } from '@supabase/ssr'
@@ -11,23 +11,29 @@ import CartEditModal from '@/components/shop/CartEditModal'
 import type { ProductWithVariants } from '@/lib/products/actions'
 
 export default function CartPage() {
-  const { items, total, updateQuantity, removeItem, replaceItem, clearCart, is_wholesale } = useCartStore()
+  const { items, total, updateQuantity, removeItem, replaceItem, addItem, clearCart, is_wholesale } = useCartStore()
   const [mounted, setMounted] = useState(false)
   const [editingItem, setEditingItem] = useState<string | null>(null)
-  const [upsellProducts, setUpsellProducts] = useState<ProductWithVariants[]>([])
+  const [upsellProducts, setUpsellProducts] = useState<any[]>([])
+  
+  // Modal for adding NEW products from upsell
+  const [quickAddSlug, setQuickAddSlug] = useState<string | null>(null)
 
   useEffect(() => {
     setMounted(true)
     
-    // Fetch upselling products (Retail side)
+    // Fetch upselling products (Based on current profile)
     async function loadUpsell() {
       const supabase = createBrowserClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
       )
 
+      // Query table based on wholesale status
+      const table = is_wholesale ? 'wholesale_products' : 'products'
+      
       const { data } = await supabase
-        .from('products')
+        .from(table)
         .select(`
           *,
           categories:category_id (id, name, slug),
@@ -39,10 +45,15 @@ export default function CartPage() {
         .eq('is_active', true)
         .limit(4)
 
-      if (data) setUpsellProducts(data as any)
+      if (data) {
+        // Find existing IDs to avoid recommending what's already in cart
+        const inCartIds = items.map(i => i.product_id)
+        const filtered = data.filter((p: any) => !inCartIds.includes(p.id))
+        setUpsellProducts(filtered)
+      }
     }
     loadUpsell()
-  }, [])
+  }, [is_wholesale, items])
 
   const currentEditingItem = useMemo(() => {
     return items.find(i => i.id === editingItem) || null
@@ -52,12 +63,9 @@ export default function CartPage() {
     if (!currentEditingItem) return
 
     const selectedFragrances = Object.entries(newCounts).map(([fid, qty]) => {
-      // Find name from old list or modal (we'll rely on the modal's data passing back)
-      // Actually simpler: pass structured data from FragranceSelector onConfirm
-      // But I only defined counts. I'll update FragranceSelector slightly if needed,
-      // or just trust the counts and names are preserved from the original item if not found?
-      // Better: update FragranceSelector to pass full objects.
-      
+      // Find from existing item or we can also get names if we had the full product list handy
+      // For now, names from FragranceSelector onConfirm is better if I update it, but
+      // I'll stick to preserving names.
       const oldF = currentEditingItem.selected_fragrances?.find(f => f.id === fid)
       return {
         id: fid,
@@ -75,6 +83,28 @@ export default function CartPage() {
     })
 
     setEditingItem(null)
+  }
+
+  const handleQuickAddItem = (product: any, counts: Record<string, number>, totalQty: number, totalPrice: number) => {
+    const selectedFragrances = Object.entries(counts).map(([fid, qty]) => ({
+      id: fid,
+      name: product.product_variants?.find((v: any) => v.fragrance_id === fid || v.id === fid)?.fragrances?.name || 'Fragancia',
+      quantity: qty
+    }))
+
+    addItem({
+      product_id: product.id,
+      product_name: product.name,
+      product_slug: product.slug,
+      image_url: product.image_url || undefined,
+      quantity: 1,
+      unit_price: totalPrice,
+      is_pack: true,
+      pack_size: totalQty,
+      selected_fragrances: selectedFragrances
+    })
+
+    setQuickAddSlug(null)
   }
 
   if (!mounted) return null
@@ -111,7 +141,7 @@ export default function CartPage() {
               <h1 className="text-5xl font-black text-gray-900 tracking-tighter">Tu Pedido</h1>
               <p className="text-xs font-black uppercase tracking-[0.2em] text-teal-600 mt-2 flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-teal-500 animate-pulse" />
-                {is_wholesale ? 'Acceso Mayorista' : 'Compra Minorista'}
+                {is_wholesale ? 'Perfil Mayorista' : 'Perfil Minorista'}
               </p>
             </div>
             <button 
@@ -126,7 +156,6 @@ export default function CartPage() {
           <div className="space-y-6">
             {items.map((item) => (
               <div key={item.id} className="bg-white p-6 md:p-8 rounded-[3rem] border border-gray-50 shadow-sm flex flex-col md:flex-row gap-8 group hover:shadow-xl hover:border-teal-50 transition-all duration-300 relative overflow-hidden">
-                {/* Visual Accent */}
                 <div className="absolute top-0 left-0 w-2 h-full bg-teal-500/0 group-hover:bg-teal-500/100 transition-all" />
 
                 {/* Image */}
@@ -143,17 +172,19 @@ export default function CartPage() {
                   <div>
                     <div className="flex justify-between items-start">
                       <div className="space-y-1">
-                        <p className="text-[10px] font-black uppercase tracking-widest text-teal-500">PACK {item.pack_size}u</p>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-teal-500">{item.is_pack ? `PACK ${item.pack_size}u` : 'PRODUCTO'}</p>
                         <h3 className="text-2xl font-black text-gray-900 leading-tight">{item.product_name}</h3>
                       </div>
                       <div className="flex gap-2">
-                        <button 
-                          onClick={() => setEditingItem(item.id)}
-                          className="p-3 bg-gray-50 rounded-2xl text-gray-400 hover:text-teal-600 hover:bg-teal-50 transition-all"
-                          title="Editar surtido"
-                        >
-                          <Edit2 size={18} />
-                        </button>
+                        {item.product_slug && (
+                          <button 
+                            onClick={() => setEditingItem(item.id)}
+                            className="p-3 bg-gray-50 rounded-2xl text-gray-400 hover:text-teal-600 hover:bg-teal-50 transition-all font-bold text-xs"
+                            title="Editar surtido"
+                          >
+                            <Edit2 size={18} />
+                          </button>
+                        )}
                         <button 
                           onClick={() => removeItem(item.id)}
                           className="p-3 bg-gray-50 rounded-2xl text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all"
@@ -164,7 +195,6 @@ export default function CartPage() {
                       </div>
                     </div>
 
-                    {/* Breakdown for Packs */}
                     {item.is_pack && item.selected_fragrances && (
                       <div className="mt-4 flex flex-wrap gap-2">
                         {item.selected_fragrances.map((f, idx) => (
@@ -208,21 +238,27 @@ export default function CartPage() {
           {upsellProducts.length > 0 && (
             <div className="pt-20 space-y-8">
                <div className="flex items-center gap-4">
-                  <h3 className="text-xl font-black text-gray-900 whitespace-nowrap">Completá tu Ritual</h3>
+                  <h3 className="text-xl font-black text-gray-900 whitespace-nowrap">Completa tu {is_wholesale ? 'Stock' : 'Ritual'}</h3>
                   <div className="h-px bg-gray-100 flex-1" />
                </div>
-               <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+               <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
                   {upsellProducts.map(p => (
-                    <Link key={p.id} href={`/productos/${p.slug}`} className="group space-y-3">
-                       <div className="relative aspect-square rounded-[2rem] overflow-hidden bg-gray-50 shadow-sm border border-gray-100 group-hover:shadow-lg transition-all">
+                    <div key={p.id} className="group flex flex-col items-center text-center space-y-4">
+                       <Link href={`/productos/${p.slug}`} className="relative w-full aspect-square rounded-[2rem] overflow-hidden bg-gray-50 shadow-sm border border-gray-100 group-hover:shadow-lg transition-all">
                           {p.image_url ? <Image src={p.image_url} alt={p.name} fill className="object-cover group-hover:scale-110 transition-transform duration-700" /> : <div className="w-full h-full flex items-center justify-center text-4xl">🌿</div>}
+                       </Link>
+                       <div className="flex-1 w-full px-2">
+                          <p className="text-[9px] font-black uppercase text-teal-600 tracking-widest mb-1">{p.categories?.name || (is_wholesale ? 'Distribución' : 'Catálogo')}</p>
+                          <h4 className="text-xs font-black text-gray-900 group-hover:text-teal-600 transition-colors line-clamp-1">{p.name}</h4>
+                          <p className="text-[10px] font-bold text-gray-400">{formatPrice(is_wholesale ? p.wholesale_price : p.retail_price)}</p>
                        </div>
-                       <div>
-                          <p className="text-[10px] font-black uppercase text-teal-600 tracking-widest mb-1">{p.categories?.name}</p>
-                          <h4 className="text-sm font-black text-gray-900 group-hover:text-teal-600 transition-colors line-clamp-1">{p.name}</h4>
-                          <p className="text-xs font-bold text-gray-400">{formatPrice(p.retail_price)}</p>
-                       </div>
-                    </Link>
+                       <button 
+                         onClick={() => setQuickAddSlug(p.slug)}
+                         className="w-full py-3 rounded-2xl bg-teal-500 text-white text-[10px] font-black uppercase tracking-widest hover:bg-teal-600 active:scale-95 transition-all flex items-center justify-center gap-2 translate-y-3 opacity-0 group-hover:translate-y-0 group-hover:opacity-100"
+                       >
+                          <PlusCircle size={14} /> Añadir rápido
+                       </button>
+                    </div>
                   ))}
                </div>
             </div>
@@ -267,9 +303,7 @@ export default function CartPage() {
                 </button>
               </div>
               
-              {/* Abstract background elements */}
               <div className="absolute -bottom-20 -right-20 w-64 h-64 bg-teal-500/5 rounded-full blur-3xl" />
-              <div className="absolute top-10 left-10 w-20 h-20 bg-white/5 rounded-full blur-2xl" />
             </div>
 
             <div className="bg-white p-8 rounded-[3rem] border border-gray-100 flex items-start gap-5 shadow-sm">
@@ -285,12 +319,29 @@ export default function CartPage() {
       </div>
 
       {/* MODALS */}
-      {currentEditingItem && (
+      {editingItem && currentEditingItem && (
         <CartEditModal 
           item={currentEditingItem}
           isWholesale={is_wholesale}
           onClose={() => setEditingItem(null)}
           onSave={handleSaveEdit}
+        />
+      )}
+
+      {/* QUICK ADD MODAL (from upsell) */}
+      {quickAddSlug && (
+        <CartEditModal 
+          item={{ product_slug: quickAddSlug, product_name: 'Cargando...', id: 'new', product_id: 'new', quantity: 1, unit_price: 0 }}
+          isWholesale={is_wholesale}
+          onClose={() => setQuickAddSlug(null)}
+          onSave={(counts, totalQty, totalPrice) => {
+             // We need the product name/data. The modal can provide it or we fetch it here.
+             // I'll update the modal to provide the full product object on confirm.
+             // Actually, the modal already calls onSave with just counts.
+             // I'll fetch it in handleQuickAddItem by finding it in upsellProducts or in the modal itself.
+             const p = upsellProducts.find(up => up.slug === quickAddSlug)
+             if (p) handleQuickAddItem(p, counts, totalQty, totalPrice)
+          }}
         />
       )}
     </div>
