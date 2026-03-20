@@ -72,7 +72,7 @@ export async function getProducts(categorySlug?: string, includeWholesale: boole
       .from('wholesale_products')
       .select(`
         *,
-        categories:category_id ( id, name, slug )
+        categories:category_id (*)
       `)
 
     if (categorySlug) {
@@ -94,13 +94,13 @@ export async function getProducts(categorySlug?: string, includeWholesale: boole
     })) as any[]
   }
 
-  // Use explicit foreign key naming to avoid any ambiguity
+  // Purest query for retail - ensuring no silent fail on joins
   let query = supabase
     .from('products')
     .select(`
       *,
-      categories:category_id ( id, name, slug ),
-      product_variants (
+      categories:category_id (*),
+      product_variants:product_variants (
         *,
         fragrances:fragrance_id (*)
       ),
@@ -114,16 +114,10 @@ export async function getProducts(categorySlug?: string, includeWholesale: boole
 
   const { data, error } = await query.order('name')
   if (error) {
-    console.error('getProducts (retail) error:', error)
-    // Very basic fallback that includes categories for UI consistency
-    const { data: simple } = await supabase.from('products').select('*, categories:category_id(*)')
-    return (simple ?? []).map((p: any) => ({
-      ...p,
-      product_variants: [],
-      wholesale_tiers: [],
-      is_wholesale_only: false,
-      is_exact_total: false
-    })) as any[]
+    console.error('getProducts error:', error)
+    // Absolute fallback
+    const { data: simple } = await supabase.from('products').select('*')
+    return (simple ?? []).map(p => ({ ...p, categories: { name: 'Varios' }, product_variants: [] })) as any
   }
 
   return (data ?? []).map((p: any) => ({
@@ -136,13 +130,13 @@ export async function getProducts(categorySlug?: string, includeWholesale: boole
 export async function getProductBySlug(slug: string): Promise<ProductWithVariants | null> {
   const supabase = createAdminClient()
   
-  // Try retail first with explicit joins
+  // Try retail first
   const { data: retail, error: rError } = await supabase
     .from('products')
     .select(`
       *,
-      categories:category_id ( id, name, slug ),
-      product_variants (
+      categories:category_id (*),
+      product_variants:product_variants (
         *,
         fragrances:fragrance_id (*)
       ),
@@ -158,14 +152,19 @@ export async function getProductBySlug(slug: string): Promise<ProductWithVariant
     } as any
   }
 
-  if (rError) console.error('getProductBySlug (retail) error:', rError)
+  if (rError) {
+    console.error('getProductBySlug retail error:', rError)
+    // Fallback search to ensure we find it
+    const { data: simple } = await supabase.from('products').select('*, categories:category_id(*)').eq('slug', slug).single()
+    if (simple) return { ...simple, product_variants: [], is_exact_total: false } as any
+  }
 
   // Try wholesale next
   const { data: wholesale } = await supabase
     .from('wholesale_products')
     .select(`
       *,
-      categories:category_id ( id, name, slug )
+      categories:category_id (*)
     `)
     .eq('slug', slug)
     .single()
