@@ -224,30 +224,47 @@ export default function FragranceSelector({ product, isWholesale = false }: Frag
               {activeVariants.map((v) => {
                  const count = packCounts[v.fragrance_id] || 0
                  return (
-                    <button
+                    <div
                       key={v.id}
-                      onClick={() => clickFragrance(v.fragrance_id)}
                       className={`group relative flex flex-col items-center justify-center p-4 rounded-3xl border-2 transition-all ${
-                         count > 0 ? 'border-teal-500 bg-white shadow-lg' : 'border-gray-100 bg-gray-50/50 hover:bg-white hover:border-gray-200'
+                         count > 0 ? 'border-teal-500 bg-white shadow-lg' : 'border-gray-100 bg-gray-50/50 hover:bg-white hover:border-gray-200 cursor-pointer'
                       }`}
+                      onClick={() => count === 0 && clickFragrance(v.fragrance_id)}
                     >
                        <span className={`text-sm font-bold text-center mb-1 ${count > 0 ? 'text-gray-900' : 'text-gray-500'}`}>
                           {v.fragrances?.name}
                        </span>
                        {count > 0 ? (
-                          <div className="flex items-center gap-2 mt-1">
-                             <button onClick={(e) => removeOne(v.fragrance_id, e)} className="w-6 h-6 rounded-lg bg-gray-100 flex items-center justify-center hover:bg-orange-100 hover:text-orange-600">
+                          <div className="flex items-center gap-2 mt-1" onClick={(e) => e.stopPropagation()}>
+                             <button 
+                               onClick={(e) => removeOne(v.fragrance_id, e)} 
+                               className="w-6 h-6 rounded-lg bg-gray-100 flex items-center justify-center hover:bg-orange-100 hover:text-orange-600 transition-colors"
+                             >
                                 <MinusIcon size={12} />
                              </button>
-                             <span className="text-sm font-black text-teal-600">{count}</span>
-                             <span className="w-6 h-6 rounded-lg bg-teal-50 flex items-center justify-center text-teal-600">
+                             <input 
+                               type="number" 
+                               value={count}
+                               onChange={(e) => {
+                                  const val = parseInt(e.target.value) || 0
+                                  const diff = val - count
+                                  if (diff <= remaining) {
+                                     setPackCounts(p => ({ ...p, [v.fragrance_id]: Math.max(0, val) }))
+                                  }
+                               }}
+                               className="w-12 h-6 p-0 text-sm font-black text-teal-600 bg-transparent text-center border-none focus:ring-0 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                             />
+                             <button 
+                               onClick={(e) => { e.stopPropagation(); clickFragrance(v.fragrance_id); }} 
+                               className="w-6 h-6 rounded-lg bg-teal-50 flex items-center justify-center text-teal-600 hover:bg-teal-100 transition-colors"
+                             >
                                 <PlusIcon size={12} />
-                             </span>
+                             </button>
                           </div>
                        ) : (
-                          <span className="text-[10px] uppercase font-black text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity">Elegir</span>
+                          <span className="text-[10px] uppercase font-black text-gray-300 group-hover:text-gray-400 transition-colors">Elegir</span>
                        )}
-                    </button>
+                    </div>
                  )
               })}
            </div>
