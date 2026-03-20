@@ -40,6 +40,36 @@ export interface UserProfile {
 export async function getProducts(categorySlug?: string, includeWholesale: boolean = false): Promise<ProductWithVariants[]> {
   const supabase = await createClient()
 
+  if (includeWholesale) {
+    // Fetch from wholesale_products
+    let query = supabase
+      .from('wholesale_products')
+      .select(`
+        *,
+        categories ( id, name, slug )
+      `)
+      .eq('is_active', true)
+
+    if (categorySlug) {
+      const { data: cat } = await supabase.from('categories').select('id').eq('slug', categorySlug).single()
+      if (cat) query = query.eq('category_id', (cat as any).id)
+    }
+
+    const { data, error } = await query.order('name')
+    if (error) return []
+
+    // Map to ProductWithVariants format
+    return (data || []).map((p: any) => ({
+      ...p,
+      product_variants: [],
+      wholesale_tiers: [],
+      is_wholesale_only: true,
+      wholesale_category: p.wholesale_category,
+      min_qty_per_variant: p.min_qty_per_variant,
+    })) as any[]
+  }
+
+  // Regular retail products
   let query = supabase
     .from('products')
     .select(`
@@ -52,30 +82,15 @@ export async function getProducts(categorySlug?: string, includeWholesale: boole
       wholesale_tiers ( * )
     `)
     .eq('is_active', true)
-
-  if (!includeWholesale) {
-    query = query.eq('is_wholesale_only', false)
-  }
-
-  query = query.order('name')
+    .eq('is_wholesale_only', false) // Retail only
 
   if (categorySlug) {
-    // Filter by category slug via join
-    const { data: cat } = await supabase
-      .from('categories')
-      .select('id')
-      .eq('slug', categorySlug)
-      .single()
-    if (cat) {
-      query = query.eq('category_id', (cat as { id: string }).id)
-    }
+    const { data: cat } = await supabase.from('categories').select('id').eq('slug', categorySlug).single()
+    if (cat) query = query.eq('category_id', (cat as any).id)
   }
 
-  const { data, error } = await query
-  if (error) {
-    console.error('getProducts error:', error)
-    return []
-  }
+  const { data, error } = await query.order('name')
+  if (error) return []
   return (data ?? []) as ProductWithVariants[]
 }
 
