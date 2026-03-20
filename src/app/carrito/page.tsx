@@ -9,6 +9,7 @@ import { formatPrice } from '@/utils/helpers'
 import { createBrowserClient } from '@supabase/ssr'
 import CartEditModal from '@/components/shop/CartEditModal'
 import type { ProductWithVariants } from '@/lib/products/actions'
+export const dynamic = 'force-dynamic'
 
 export default function CartPage() {
   const { items, total, updateQuantity, removeItem, replaceItem, addItem, clearCart, is_wholesale, setWholesale } = useCartStore()

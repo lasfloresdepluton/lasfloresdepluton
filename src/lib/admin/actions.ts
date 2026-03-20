@@ -252,12 +252,19 @@ export async function toggleProductActive(productId: string, isActive: boolean) 
 // ── LOGO / SITE SETTINGS ──────────────────────────────────────────────────────
 
 export async function getLogo(): Promise<string | null> {
-  const supabase = createAdminClient()
-  const { data } = await (supabase.from('site_settings') as any)
-    .select('value')
-    .eq('key', 'logo_url')
-    .single()
-  return data?.value ?? null
+  try {
+    const supabase = createAdminClient()
+    const { data, error } = await (supabase.from('site_settings') as any)
+      .select('value')
+      .eq('key', 'logo_url')
+      .single()
+    
+    if (error) return null
+    return data?.value ?? null
+  } catch (e) {
+    console.warn('getLogo failed during build, using fallback', e)
+    return null
+  }
 }
 
 export async function setLogo(url: string) {

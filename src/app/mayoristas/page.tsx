@@ -4,6 +4,8 @@ import { getSession, getProfile } from '@/lib/auth/actions'
 import { getWholesaleProducts, WholesaleProduct, getFragrances, Fragrance } from '@/lib/products/actions'
 import WholesaleQuickOrder from '@/components/shop/WholesaleQuickOrder'
 
+export const dynamic = 'force-dynamic'
+
 export default async function MayoristasPage() {
   const user = await getSession()
   let isWholesaler = false
