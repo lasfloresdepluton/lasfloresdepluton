@@ -37,8 +37,7 @@ export default function RegisterForm({ logoUrl }: { logoUrl?: string | null }) {
       >
         <div className="text-center mb-8">
           <div
-            className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4 overflow-hidden relative"
-            style={{ background: logoUrl ? 'transparent' : 'var(--accent-teal)' }}
+            className="w-32 h-32 flex items-center justify-center mx-auto mb-6 overflow-hidden relative"
           >
             {logoUrl ? (
               <Image 
@@ -46,9 +45,12 @@ export default function RegisterForm({ logoUrl }: { logoUrl?: string | null }) {
                 alt="Las Flores de Plutón" 
                 fill 
                 className="object-contain"
+                priority
               />
             ) : (
-              <Leaf size={24} color="white" />
+              <div className="w-16 h-16 rounded-full bg-[color:var(--accent-teal)] flex items-center justify-center">
+                <Leaf size={32} color="white" />
+              </div>
             )}
           </div>
           <h1 className="font-display text-3xl font-bold" style={{ color: 'var(--text-dark)' }}>
