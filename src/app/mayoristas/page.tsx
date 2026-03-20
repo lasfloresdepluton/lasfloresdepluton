@@ -1,4 +1,3 @@
-import NavbarWrapper from '@/components/layout/NavbarWrapper'
 import Link from 'next/link'
 import { Store, Clock, Shield, MessageCircle, FileText } from 'lucide-react'
 import { getSession, getProfile } from '@/lib/auth/actions'
@@ -23,7 +22,6 @@ export default async function MayoristasPage() {
     ])
     return (
       <div style={{ background: '#F5F0E8', minHeight: '100vh' }}>
-        <NavbarWrapper />
         <div className="pt-28 pb-20 px-6 max-w-6xl mx-auto">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
             <div className="flex items-center gap-3">
@@ -52,7 +50,6 @@ export default async function MayoristasPage() {
   // Otherwise show the landing page
   return (
     <div style={{ background: 'var(--bg-cream)', minHeight: '100vh' }}>
-      <NavbarWrapper />
       {/* ... previous landing page content ... */}
       <div
         className="pt-28 pb-16 px-6 text-center relative overflow-hidden"

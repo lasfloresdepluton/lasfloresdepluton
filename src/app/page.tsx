@@ -1,5 +1,4 @@
 import Link from 'next/link';
-import NavbarWrapper from '@/components/layout/NavbarWrapper';
 import Image from 'next/image';
 import { getLogo, getAdminCategories, getSiteSettings } from '@/lib/admin/actions';
 import { Sparkles, Package, TruckIcon, Leaf } from 'lucide-react';
@@ -100,7 +99,6 @@ export default async function HomePage() {
 
   return (
     <div style={{ background: 'var(--bg-cream)', minHeight: '100vh' }}>
-      <NavbarWrapper />
 
 
       {/* ── HERO ─────────────────────────────────────────────────────────── */}

@@ -22,7 +22,7 @@ export default function Navbar({ logoUrl }: { logoUrl?: string | null }) {
   ];
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 px-6 py-4 bg-white/80 backdrop-blur-xl border-b border-gray-100">
+    <header className="fixed top-0 left-0 right-0 z-[100] px-6 py-4 bg-white/80 backdrop-blur-xl border-b border-gray-100">
       <nav className="max-w-7xl mx-auto flex items-center justify-between">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-3 group">
