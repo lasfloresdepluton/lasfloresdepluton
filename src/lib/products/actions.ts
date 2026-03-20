@@ -96,7 +96,9 @@ export async function getProducts(categorySlug?: string, includeWholesale: boole
 
 export async function getProductBySlug(slug: string): Promise<ProductWithVariants | null> {
   const supabase = await createClient()
-  const { data, error } = await supabase
+  
+  // Try retail first
+  const { data: retail, error: retailErr } = await supabase
     .from('products')
     .select(`
       *,
@@ -110,8 +112,30 @@ export async function getProductBySlug(slug: string): Promise<ProductWithVariant
     .eq('is_active', true)
     .single()
 
-  if (error || !data) return null
-  return data as ProductWithVariants
+  if (retail) return retail as ProductWithVariants
+
+  // Try wholesale next
+  const { data: wholesale, error: wholesaleErr } = await supabase
+    .from('wholesale_products')
+    .select(`
+      *,
+      categories ( name, slug )
+    `)
+    .eq('slug', slug)
+    .eq('is_active', true)
+    .single()
+
+  if (wholesale) {
+    return {
+      ...(wholesale as any),
+      product_variants: [],
+      is_wholesale_only: true,
+      wholesale_category: (wholesale as any).wholesale_category,
+      min_qty_per_variant: (wholesale as any).min_qty_per_variant,
+    } as ProductWithVariants
+  }
+
+  return null
 }
 
 export async function getCategories(): Promise<Category[]> {
