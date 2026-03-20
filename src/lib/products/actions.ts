@@ -85,14 +85,16 @@ export async function getProducts(categorySlug?: string, includeWholesale: boole
     })) as any[]
   }
 
-  // Purest retail query
+  // Combined select for retail with explicit joins for tiers and variants
+  // Using explicit relationship names to avoid any potential Supabase ambiguity
   let query = supabase.from('products').select(`
     *,
     categories:category_id (*),
-    product_variants (
+    product_variants:product_variants (
       *,
       fragrances:fragrance_id (*)
-    )
+    ),
+    wholesale_tiers:wholesale_tiers (*)
   `)
 
   if (categorySlug) {
@@ -102,51 +104,56 @@ export async function getProducts(categorySlug?: string, includeWholesale: boole
 
   const { data, error } = await query.order('name')
   if (error) {
-    console.error('getProducts error:', error)
+    console.error('getProducts (retail) main query error:', error)
+    // Absolute fallback if complex joins fail
     const { data: fallback } = await supabase.from('products').select('*, categories:category_id (*)')
-    return (fallback ?? []).map((p: any) => ({ 
-      ...p, 
-      product_variants: [],
-      wholesale_tiers: [],
-      is_wholesale_only: false,
-      is_exact_total: false
+    return (fallback ?? []).map((p: any) => ({
+       ...p,
+       product_variants: [],
+       wholesale_tiers: [],
+       is_wholesale_only: false,
+       is_exact_total: false
     })) as any
   }
 
   return (data ?? []).map((p: any) => ({
     ...p,
     is_wholesale_only: false,
-    is_exact_total: false,
-    wholesale_tiers: []
+    is_exact_total: false
   })) as ProductWithVariants[]
 }
 
 export async function getProductBySlug(slug: string): Promise<ProductWithVariants | null> {
   const supabase = createAdminClient()
   
+  // Try retail with full relations
   const { data: retail, error } = await supabase
     .from('products')
     .select(`
       *,
       categories:category_id (*),
-      product_variants (
+      product_variants:product_variants (
         *,
         fragrances:fragrance_id (*)
-      )
+      ),
+      wholesale_tiers:wholesale_tiers (*)
     `)
     .eq('slug', slug)
     .maybeSingle()
 
   if (retail) {
+    const r = retail as any
+    // Ensure wholesale_tiers is always an array
     return {
-      ...(retail as any),
+      ...r,
       is_exact_total: false,
-      wholesale_tiers: []
+      wholesale_tiers: r.wholesale_tiers || []
     } as any
   }
 
-  if (error) console.error('getProductBySlug error:', error)
+  if (error) console.error('getProductBySlug retail error:', error)
 
+  // Try wholesale next
   const { data: wholesale } = await supabase
     .from('wholesale_products')
     .select('*, categories:category_id (*)')
@@ -155,7 +162,20 @@ export async function getProductBySlug(slug: string): Promise<ProductWithVariant
 
   if (wholesale) {
      const w = wholesale as any
-     const { data: fragrances } = await supabase.from('fragrances').select('*').eq('is_active', true).order('name')
+     
+     // Fetch tiers for wholesale_products if they exist (linked by product_id)
+     const { data: tiers } = await supabase
+       .from('wholesale_tiers')
+       .select('*')
+       .eq('product_id', w.id)
+       .order('min_total_qty', { ascending: true })
+
+     const { data: fragrances } = await supabase
+       .from('fragrances')
+       .select('*')
+       .eq('is_active', true)
+       .order('name')
+
      const syntheticVariants = (fragrances || []).map((f: any) => ({
        id: f.id,
        fragrance_id: f.id,
@@ -171,7 +191,7 @@ export async function getProductBySlug(slug: string): Promise<ProductWithVariant
        is_wholesale_only: true,
        is_exact_total: w.is_exact_total || false,
        product_variants: syntheticVariants,
-       wholesale_tiers: [],
+       wholesale_tiers: tiers || [],
        wholesale_price: w.wholesale_price,
        min_qty_per_variant: w.min_qty_per_variant || 1
      } as any
