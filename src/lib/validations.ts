@@ -21,11 +21,21 @@ export const ProfileUpdateSchema = z.object({
 });
 
 // ── Cart ──────────────────────────────────────────────────────────────────────
+export const SelectedFragranceSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  quantity: z.number().int().positive(),
+});
+
 export const CartItemSchema = z.object({
   product_id: z.string().uuid(),
-  variant_id: z.string().uuid().optional(),
+  product_name: z.string(),
+  image_url: z.string().url().optional(),
   quantity: z.number().int().positive(),
-  selected_fragrances: z.array(z.string().uuid()).optional(), // For packs
+  unit_price: z.number().positive(),
+  is_pack: z.boolean(),
+  pack_size: z.number().int().optional(),
+  selected_fragrances: z.array(SelectedFragranceSchema).optional(),
 });
 
 // ── Checkout ──────────────────────────────────────────────────────────────────
@@ -77,3 +87,4 @@ export type CheckoutInput = z.infer<typeof CheckoutSchema>;
 export type ProductInput = z.infer<typeof ProductSchema>;
 export type FragranceInput = z.infer<typeof FragranceSchema>;
 export type OrderStatusUpdate = z.infer<typeof OrderStatusUpdateSchema>;
+export type SelectedFragrance = z.infer<typeof SelectedFragranceSchema>;
