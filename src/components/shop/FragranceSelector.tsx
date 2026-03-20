@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import Image from 'next/image'
-import { ShoppingCart, Check, AlertCircle, Trash2, Copy, Plus, Minus } from 'lucide-react'
+import { ShoppingCart, Check, AlertCircle, Trash2, Copy, Plus, Minus, Sparkles } from 'lucide-react'
 import { formatPrice } from '@/utils/helpers'
 import { useCartStore } from '@/store/cartStore'
 import type { ProductWithVariants } from '@/lib/products/actions'
@@ -24,6 +24,7 @@ export default function FragranceSelector({ product, isWholesale = false }: Frag
   const setWholesale = useCartStore((s) => s.setWholesale)
 
   // 1. CAPACITY & TIERS
+  // For wholesale, we use min_total_qty as the standard "Pack Size" for the builder
   const hasTiers = product.wholesale_tiers && product.wholesale_tiers.length > 0
   const [selectedPackSize, setSelectedPackSize] = useState<number>(() => {
     return product.pack_slots || product.min_total_qty || 100
@@ -48,32 +49,28 @@ export default function FragranceSelector({ product, isWholesale = false }: Frag
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [selectedVariantId, setSelectedVariantId] = useState<string | null>(activeVariants[0]?.id ?? null)
 
-  // 3. LOGIC
+  // 3. LOGIC (STRICT PACK)
   const packSlots = isWholesale ? selectedPackSize : (product.pack_slots || 0)
   const totalSelected = Object.values(packCounts).reduce((s, n) => s + n, 0)
   const remaining = packSlots - totalSelected
-  // For wholesale, if it's NOT exact total, we can add MORE than min
-  const packComplete = product.is_exact_total ? remaining === 0 : totalSelected >= (product.min_total_qty || 1)
+  const packComplete = remaining === 0
 
   const displayImage = product.is_pack
     ? activeVariants[0]?.image_url ?? null
     : (activeVariants.find(v => v.id === selectedVariantId)?.image_url ?? null)
 
-  // Calculate current dynamic price
-  const currentTotal = unitPrice * totalSelected
-
   // Handlers
   function clickFragrance(fragId: string) {
-    // If exact total, respect packSlots. Otherwise, always allow adding.
-    if (product.is_exact_total && remaining <= 0) return
+    if (remaining <= 0) return // BLOCK: NO EXTRA UNITS ALLOWED
     
     setPackCounts((prev) => {
       const current = prev[fragId] || 0
       const jump = product.min_qty_per_variant || 1
       let next = current + 1
+      
+      // If it's a first choice and there's a min jump required
       if (current === 0 && jump > 1) {
-         // Respect exact total limit even in jump
-         next = product.is_exact_total ? Math.min(jump, remaining) : jump
+         next = Math.min(jump, remaining) // Respect the ceiling even in the jump
       }
       return { ...prev, [fragId]: next }
     })
@@ -96,7 +93,7 @@ export default function FragranceSelector({ product, isWholesale = false }: Frag
   function confirmPackAndAddAnother() {
     setErrorMsg(null)
     if (!packComplete) {
-      setErrorMsg(`Mínimo ${product.min_total_qty || product.pack_slots} unidades para guardar este pack.`)
+      setErrorMsg(`Completá las ${remaining} unidades restantes para cerrar este pack.`)
       return
     }
 
@@ -110,7 +107,7 @@ export default function FragranceSelector({ product, isWholesale = false }: Frag
       id: Math.random().toString(36).substr(2, 9),
       counts: { ...packCounts },
       totalUnits: totalSelected,
-      priceOfThisPack: currentTotal
+      priceOfThisPack: basePrice // It's exactly the pack price
     }
 
     setDraftPacks(prev => [...prev, newDraft])
@@ -132,16 +129,17 @@ export default function FragranceSelector({ product, isWholesale = false }: Frag
     setErrorMsg(null)
     const allPacks = [...draftPacks]
     
+    // Auto-confirm current selection IF complete
     if (totalSelected > 0) {
       if (packComplete) {
         allPacks.push({
           id: 'current',
           counts: packCounts,
           totalUnits: totalSelected,
-          priceOfThisPack: currentTotal
+          priceOfThisPack: basePrice
         })
       } else {
-        setErrorMsg("Tienes una selección incompleta. Completala o borrala antes de finalizar.")
+        setErrorMsg("Tienes un pack incompleto. Completalo o vacialo para finalizar.")
         return
       }
     }
@@ -189,23 +187,19 @@ export default function FragranceSelector({ product, isWholesale = false }: Frag
         )}
       </div>
 
-      {/* WHOLESALE PACK SELECTOR (If tiers exist) */}
+      {/* WHOSALE TIER SELECTOR */}
       {isWholesale && hasTiers && (
         <div className="flex gap-3">
-           <button 
-             onClick={() => { setSelectedPackSize(100); setPackCounts({}); }}
-             className={`flex-1 p-4 rounded-2xl border-2 transition-all ${selectedPackSize === 100 ? 'border-teal-500 bg-teal-50/30' : 'border-gray-100 bg-white'}`}
-           >
-              <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Pack x 100</p>
-              <p className="text-lg font-black text-gray-900">{formatPrice(product.wholesale_price || 0)}</p>
-           </button>
-           <button 
-             onClick={() => { setSelectedPackSize(500); setPackCounts({}); }}
-             className={`flex-1 p-4 rounded-2xl border-2 transition-all relative overflow-hidden ${selectedPackSize === 500 ? 'border-teal-500 bg-teal-50/30' : 'border-gray-100 bg-white'}`}
-           >
-              <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Pack x 500</p>
-              <p className="text-lg font-black text-gray-900">{formatPrice((product.wholesale_tiers.find(t=>t.min_total_qty===500) as any)?.wholesale_price || 0)}</p>
-           </button>
+           {product.wholesale_tiers.map(t => (
+             <button 
+               key={t.min_total_qty}
+               onClick={() => { setSelectedPackSize(t.min_total_qty); setPackCounts({}); }}
+               className={`flex-1 p-4 rounded-2xl border-2 transition-all ${selectedPackSize === t.min_total_qty ? 'border-teal-500 bg-teal-50/30' : 'border-gray-100 bg-white'}`}
+             >
+                <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1">Pack x {t.min_total_qty}</p>
+                <p className="text-lg font-black text-gray-900">{formatPrice(t.wholesale_price)}</p>
+             </button>
+           ))}
         </div>
       )}
 
@@ -214,23 +208,21 @@ export default function FragranceSelector({ product, isWholesale = false }: Frag
         <div className="flex justify-between items-baseline">
            <h2 className="text-xl font-black text-gray-900">Armá tu Surtido</h2>
            <div className="text-right">
-              <span className="text-2xl font-black text-teal-600 block">{formatPrice(currentTotal || basePrice)}</span>
-              {isWholesale && (
-                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">({formatPrice(unitPrice)} c/u)</span>
-              )}
+              <span className="text-2xl font-black text-teal-600 block">{formatPrice(basePrice)}</span>
+              {isWholesale && <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">({formatPrice(unitPrice)} c/u)</span>}
            </div>
         </div>
 
-        {/* Progress Bar */}
+        {/* Progress Bar (STRICT) */}
         <div className="space-y-2">
             <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-gray-400">
-                <span>Unidades seleccionadas</span>
-                <span className={packComplete ? 'text-teal-600' : 'text-gray-900'}>{totalSelected} {product.is_exact_total ? `/ ${packSlots}` : 'u.'}</span>
+                <span className={packComplete ? 'text-teal-600' : ''}>{packComplete ? '✓ Pack Completo' : 'Espacios en el pack'}</span>
+                <span className={packComplete ? 'text-teal-600' : 'text-gray-900'}>{totalSelected} / {packSlots}</span>
             </div>
-            <div className="h-3 w-full bg-gray-50 rounded-full overflow-hidden p-0.5">
+            <div className={`h-3 w-full rounded-full overflow-hidden p-0.5 transition-colors ${packComplete ? 'bg-teal-50' : 'bg-gray-50'}`}>
                 <div 
-                  className="h-full bg-teal-500 rounded-full transition-all duration-500"
-                  style={{ width: `${Math.min(100, (totalSelected / (packSlots || 1)) * 100)}%` }}
+                  className={`h-full rounded-full transition-all duration-500 ${packComplete ? 'bg-teal-500 shadow-[0_0_10px_rgba(20,184,166,0.3)]' : 'bg-teal-400'}`}
+                  style={{ width: `${(totalSelected / packSlots) * 100}%` }}
                 />
             </div>
         </div>
@@ -239,12 +231,14 @@ export default function FragranceSelector({ product, isWholesale = false }: Frag
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 py-2">
           {activeVariants.map((v) => {
             const count = packCounts[v.fragrance_id] || 0
+            const isDisabled = remaining <= 0 && count === 0
             return (
               <div
                 key={v.id}
-                onClick={() => count === 0 && clickFragrance(v.fragrance_id)}
+                onClick={() => !isDisabled && count === 0 && clickFragrance(v.fragrance_id)}
                 className={`group p-3 rounded-2xl border-2 transition-all flex flex-col items-center gap-1 ${
-                  count > 0 ? 'border-teal-500 bg-teal-50/20' : 'border-gray-100 hover:border-gray-200 cursor-pointer'
+                  count > 0 ? 'border-teal-500 bg-teal-50/20' : 
+                  (isDisabled ? 'opacity-30 cursor-not-allowed border-gray-100' : 'border-gray-100 hover:border-gray-200 cursor-pointer')
                 }`}
               >
                 <span className="text-[11px] font-bold text-gray-700 text-center leading-tight">{v.fragrances?.name}</span>
@@ -252,10 +246,16 @@ export default function FragranceSelector({ product, isWholesale = false }: Frag
                   <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
                     <button onClick={e => removeOne(v.fragrance_id, e)} className="p-1 rounded-lg bg-white shadow-sm hover:bg-red-50 hover:text-red-500"><Minus size={12} /></button>
                     <span className="text-xs font-black text-teal-600 w-4 text-center">{count}</span>
-                    <button onClick={() => clickFragrance(v.fragrance_id)} className="p-1 rounded-lg bg-white shadow-sm hover:bg-teal-100 hover:text-teal-600"><Plus size={12} /></button>
+                    <button 
+                      onClick={() => !isDisabled && clickFragrance(v.fragrance_id)} 
+                      disabled={remaining <= 0}
+                      className="p-1 rounded-lg bg-white shadow-sm hover:bg-teal-100 hover:text-teal-600 disabled:opacity-20"
+                    >
+                      <Plus size={12} />
+                    </button>
                   </div>
                 ) : (
-                  <span className="text-[9px] font-black uppercase text-gray-300">Sumar</span>
+                  <span className="text-[9px] font-black uppercase text-gray-300">{isDisabled ? 'Recipiente Lleno' : 'Sumar'}</span>
                 )}
               </div>
             )
@@ -270,14 +270,17 @@ export default function FragranceSelector({ product, isWholesale = false }: Frag
             packComplete ? 'bg-teal-500 text-white shadow-lg shadow-teal-100 hover:bg-teal-600' : 'bg-gray-100 text-gray-400'
           }`}
         >
-          {packComplete ? '✓ Confirmar este pack y armar otro' : `Faltan unidades`}
+          {packComplete ? '✓ Confirmar este pack y armar otro' : `Faltan ${remaining} unidades`}
         </button>
       </div>
 
       {/* MY DRAFTS SECTION */}
       {draftPacks.length > 0 && (
         <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4">
-           <h3 className="text-xs font-black uppercase tracking-widest text-gray-400 px-2">Tus Packs Listos</h3>
+           <div className="flex justify-between items-center px-2">
+              <h3 className="text-xs font-black uppercase tracking-widest text-gray-400">Tus Packs Listos</h3>
+              <span className="text-[10px] font-black bg-teal-100 text-teal-700 px-2 py-0.5 rounded-full">Total: {formatPrice(draftPacks.reduce((s,p)=>s+p.priceOfThisPack, 0))}</span>
+           </div>
            <div className="space-y-3">
               {draftPacks.map((pack, idx) => (
                 <div key={pack.id} className="flex items-center gap-4 bg-white p-4 rounded-3xl border border-gray-100 shadow-sm group">
@@ -286,7 +289,7 @@ export default function FragranceSelector({ product, isWholesale = false }: Frag
                    </div>
                    <div className="flex-1 min-w-0">
                       <p className="text-sm font-black text-gray-900 truncate">Pack de {pack.totalUnits} unidades</p>
-                      <p className="text-[10px] text-teal-600 font-bold">{formatPrice(pack.priceOfThisPack)} total</p>
+                      <p className="text-[10px] text-teal-600 font-bold">{formatPrice(pack.priceOfThisPack)}</p>
                    </div>
                    <div className="flex gap-2">
                       <button 
