@@ -119,7 +119,7 @@ export async function getProductBySlug(slug: string): Promise<ProductWithVariant
 
   if (retail) {
     return {
-      ...retail,
+      ...(retail as any),
       is_exact_total: false
     } as any
   }
