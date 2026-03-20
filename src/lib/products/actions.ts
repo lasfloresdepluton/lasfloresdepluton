@@ -126,12 +126,40 @@ export async function getProductBySlug(slug: string): Promise<ProductWithVariant
     .single()
 
   if (wholesale) {
+    const w = wholesale as any;
+    const [tiersRes, fragrancesRes] = await Promise.all([
+      supabase.from('wholesale_tiers').select('*').eq('product_id', w.id).order('min_total_qty', { ascending: true }),
+      supabase.from('fragrances').select('*').eq('is_active', true).order('name')
+    ])
+
+    const cleanName = w.name
+      .replace(' (Wholesale)', '')
+      .replace(' (Unitario)', '')
+      .replace(' (Pack 100/500)', '')
+
     return {
-      ...(wholesale as any),
-      product_variants: [],
+      ...w,
+      name: cleanName,
+      is_pack: true, // Wholesale in this table are always customized packs/selections
+      pack_slots: w.min_total_qty || 100, // Default to 100 or its minimum
+      product_variants: (fragrancesRes.data || []).map((f: any) => ({
+        id: f.id,
+        fragrance_id: f.id,
+        product_id: w.id,
+        is_active: true,
+        image_url: w.image_url,
+        fragrances: f,
+        stock: 999
+      })),
+      wholesale_tiers: (tiersRes.data || []).map((t: any) => ({
+        id: t.id,
+        product_id: t.product_id,
+        min_total_qty: t.min_total_qty,
+        wholesale_price: t.price_per_unit || t.wholesale_price,
+      })),
       is_wholesale_only: true,
-      wholesale_category: (wholesale as any).wholesale_category,
-      min_qty_per_variant: (wholesale as any).min_qty_per_variant,
+      wholesale_category: w.wholesale_category,
+      min_qty_per_variant: w.min_qty_per_variant,
     } as ProductWithVariants
   }
 
