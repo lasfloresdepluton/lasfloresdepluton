@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { ShoppingCart, Wand2, Plus, Minus, X, Check, Info, AlertCircle } from 'lucide-react';
+import { ShoppingCart, Wand2, Plus, Minus, X, Check, AlertCircle } from 'lucide-react';
 import { useCartStore } from '@/store/cartStore';
 import { WholesaleProduct, Fragrance } from '@/lib/products/actions';
 import Image from 'next/image';
@@ -36,7 +36,6 @@ export default function WholesaleQuickOrder({ products, fragrances }: Props) {
       const current = productQtys[fragranceId] || 0;
       let next = current + delta;
       
-      // Smart Incrementor: jump to minJump, then +1
       if (delta > 0 && current === 0) {
         next = minJump;
       } else if (delta < 0 && current === minJump) {
@@ -93,19 +92,35 @@ export default function WholesaleQuickOrder({ products, fragrances }: Props) {
     setWholesale(true);
     const productQtys = quantities[product.id] || {};
     
-    Object.entries(productQtys).forEach(([fragId, qty]) => {
-      if (qty <= 0) return;
-      const fragrance = fragrances.find(f => f.id === fragId);
-      addItem({
-        product_id: product.id,
-        product_name: product.name,
-        variant_id: fragId,
-        fragrance_name: fragrance?.name || 'Fragancia',
-        image_url: (product as any).image_url || undefined,
-        quantity: qty,
-        unit_price: product.wholesale_price / ((product as any).min_total_qty || 1),
-        is_pack: false,
+    // Map selections to the new structured SelectedFragrance array
+    const selectedFragrances = Object.entries(productQtys)
+      .filter(([_, qty]) => qty > 0)
+      .map(([fragId, qty]) => {
+        const fragrance = fragrances.find(f => f.id === fragId);
+        return {
+          id: fragId,
+          name: fragrance?.name || 'Fragancia',
+          quantity: qty
+        };
       });
+
+    if (selectedFragrances.length === 0) return;
+
+    // Calculate effective price. If it's wholesale, price is often per unit but we display pack total.
+    // In our DB, wholesale_price IS the pack price for min_total_qty.
+    // So unit price is wholesale_price / min_total_qty.
+    const unitPrice = product.wholesale_price / (product.min_total_qty || 1);
+    const totalPrice = unitPrice * totalQty;
+
+    addItem({
+      product_id: product.id,
+      product_name: product.name,
+      image_url: (product as any).image_url || undefined,
+      quantity: 1, // Adding as 1 logical selection/pack
+      unit_price: totalPrice,
+      is_pack: true,
+      pack_size: totalQty,
+      selected_fragrances: selectedFragrances
     });
 
     setQuantities((prev) => {
@@ -116,7 +131,7 @@ export default function WholesaleQuickOrder({ products, fragrances }: Props) {
   };
 
   return (
-    <div className="space-y-12">
+    <div className="space-y-12 pb-20">
       {Object.entries(categories).map(([catName, catProducts]) => (
         <section key={catName} className="bg-white rounded-[40px] overflow-hidden shadow-sm border border-gray-100">
           <div className="bg-gray-50/50 px-8 py-6 border-b border-gray-100">
@@ -133,7 +148,6 @@ export default function WholesaleQuickOrder({ products, fragrances }: Props) {
               return (
                 <div key={product.id} className="p-8 lg:p-10">
                   <div className="flex flex-col lg:flex-row gap-10">
-                    {/* Left: Product Info */}
                     <div className="lg:w-1 whitespace-nowrap grow-0 shrink-0 basis-80">
                       <div className="flex items-center gap-5 mb-6">
                         <div className="w-20 h-20 relative rounded-3xl overflow-hidden bg-gray-50 border border-gray-100 shrink-0">
@@ -143,10 +157,10 @@ export default function WholesaleQuickOrder({ products, fragrances }: Props) {
                           <h3 className="font-display text-xl font-bold text-gray-900 leading-tight mb-1">{product.name}</h3>
                           <div className="flex flex-wrap items-center gap-2">
                              <span className="text-sm font-black text-teal-600">
-                               ${product.wholesale_price.toLocaleString('es-AR')}
+                               $ {(product.wholesale_price / target).toFixed(2)} c/u
                              </span>
                              <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest bg-gray-100 px-2 py-0.5 rounded">
-                               Min Total: {target}u
+                               Min. {target}u
                              </span>
                           </div>
                         </div>
@@ -187,7 +201,6 @@ export default function WholesaleQuickOrder({ products, fragrances }: Props) {
                       </div>
                     </div>
 
-                    {/* Right: Fragrance Selection */}
                     <div className="flex-1">
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                         {fragrances.map((f) => {
