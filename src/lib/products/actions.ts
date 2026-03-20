@@ -85,7 +85,7 @@ export async function getProducts(categorySlug?: string, includeWholesale: boole
     })) as any[]
   }
 
-  // Simplified retail query that IS KNOWN TO WORK (listing works now)
+  // Purest retail query
   let query = supabase.from('products').select(`
     *,
     categories:category_id (*),
@@ -104,21 +104,26 @@ export async function getProducts(categorySlug?: string, includeWholesale: boole
   if (error) {
     console.error('getProducts error:', error)
     const { data: fallback } = await supabase.from('products').select('*, categories:category_id (*)')
-    return (fallback ?? []).map(p => ({ ...p, product_variants: [] })) as any
+    return (fallback ?? []).map((p: any) => ({ 
+      ...p, 
+      product_variants: [],
+      wholesale_tiers: [],
+      is_wholesale_only: false,
+      is_exact_total: false
+    })) as any
   }
 
   return (data ?? []).map((p: any) => ({
     ...p,
     is_wholesale_only: false,
     is_exact_total: false,
-    wholesale_tiers: [] // Keep it empty for now to avoid join errors
+    wholesale_tiers: []
   })) as ProductWithVariants[]
 }
 
 export async function getProductBySlug(slug: string): Promise<ProductWithVariants | null> {
   const supabase = createAdminClient()
   
-  // Try retail with the most basic possible query to avoid 404
   const { data: retail, error } = await supabase
     .from('products')
     .select(`
@@ -142,7 +147,6 @@ export async function getProductBySlug(slug: string): Promise<ProductWithVariant
 
   if (error) console.error('getProductBySlug error:', error)
 
-  // Try wholesale
   const { data: wholesale } = await supabase
     .from('wholesale_products')
     .select('*, categories:category_id (*)')
@@ -179,7 +183,7 @@ export async function getProductBySlug(slug: string): Promise<ProductWithVariant
 export async function getCategories(): Promise<Category[]> {
   const supabase = createAdminClient()
   const { data } = await supabase.from('categories').select('*').order('name')
-  return data || []
+  return (data || []) as any[]
 }
 
 export async function getWholesaleProducts(): Promise<WholesaleProduct[]> {
@@ -189,5 +193,5 @@ export async function getWholesaleProducts(): Promise<WholesaleProduct[]> {
 export async function getFragrances(): Promise<Fragrance[]> {
   const supabase = createAdminClient()
   const { data } = await supabase.from('fragrances').select('*').eq('is_active', true).order('name')
-  return data || []
+  return (data || []) as any[]
 }
