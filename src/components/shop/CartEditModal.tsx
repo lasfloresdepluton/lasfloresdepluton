@@ -5,7 +5,7 @@ import { X, Loader2, Sparkles, AlertCircle } from 'lucide-react'
 import { createBrowserClient } from '@supabase/ssr'
 import FragranceSelector from './FragranceSelector'
 import type { CartItem } from '@/store/cartStore'
-import type { ProductWithVariants } from '@/lib/products/actions'
+import type { ProductWithVariants, Fragrance } from '@/lib/products/actions'
 
 interface Props {
   item: Partial<CartItem> 
@@ -34,52 +34,62 @@ export default function CartEditModal({ item, isWholesale, onClose, onSave }: Pr
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
       )
 
-      // DETERMINING THE CORRECT TABLE (CRUCIAL FIX)
-      // Products in wholesale are in 'wholesale_products'
-      const table = isWholesale ? 'wholesale_products' : 'products'
-      
-      let query = supabase.from(table).select(`
-          *,
-          categories:category_id (id, name, slug),
-          product_variants (
-            id, fragrance_id, image_url, is_active,
-            fragrances:fragrance_id (*)
-          )
-        `)
-      
-      if (slug) query = query.eq('slug', slug)
-      else query = query.eq('id', id)
-
-      const { data, error: queryError } = await query.single()
-
-      if (queryError || !data) {
-        // Fallback: If not in the selected table, try the other table
-        const otherTable = isWholesale ? 'products' : 'wholesale_products'
-        const { data: fallbackData, error: fallbackError } = await supabase
-          .from(otherTable)
-          .select(`
+      try {
+        // DETERMINING SOURCE TABLE
+        // Major logic fix: Wholesale products don't have variants joined directly in the DB schema
+        const table = isWholesale ? 'wholesale_products' : 'products'
+        
+        let query = supabase.from(table).select(`
             *,
-            categories:category_id (id, name, slug),
-            product_variants (
-              id, fragrance_id, image_url, is_active,
-              fragrances:fragrance_id (*)
-            )
+            categories:category_id (id, name, slug)
           `)
-          .eq(slug ? 'slug' : 'id', slug || id)
-          .single()
+        
+        if (slug) query = query.eq('slug', slug)
+        else query = query.eq('id', id)
 
-        if (fallbackError || !fallbackData) {
-          console.error('Modal Full Failure:', queryError, fallbackError)
-          setError("No pudimos encontrar el producto en el catálogo.")
-          setTimeout(onClose, 2500)
-          return
+        const { data, error: queryError } = await query.single()
+
+        if (queryError || !data) {
+          throw new Error('No pudimos encontrar el producto.')
         }
-        setProduct(fallbackData as any)
-      } else {
-        setProduct(data as any)
+
+        const p = data as any
+
+        // If it's wholesale, we need to load ALL fragrances as variants manually
+        if (isWholesale) {
+          const { data: frags } = await supabase
+            .from('fragrances')
+            .select('*')
+            .eq('is_active', true)
+            .order('name')
+
+          if (frags) {
+            p.product_variants = (frags as Fragrance[]).map(f => ({
+              id: f.id,
+              fragrance_id: f.id,
+              image_url: null,
+              is_active: true,
+              fragrances: f
+            }))
+          }
+        } else {
+          // If it's retail, load the actual variants defined for that product
+          const { data: variants } = await supabase
+            .from('product_variants')
+            .select('*, fragrances:fragrance_id (*)')
+            .eq('product_id', p.id)
+            .eq('is_active', true)
+          
+          p.product_variants = variants || []
+        }
+
+        setProduct(p)
+        setLoading(false)
+      } catch (err: any) {
+        console.error('Modal Load Error:', err)
+        setError("Error de carga. Redirigiendo...")
+        setTimeout(onClose, 2000)
       }
-      
-      setLoading(false)
     }
 
     loadProduct()
@@ -89,7 +99,9 @@ export default function CartEditModal({ item, isWholesale, onClose, onSave }: Pr
     if (!item.selected_fragrances) return {}
     const counts: Record<string, number> = {}
     item.selected_fragrances.forEach(f => {
-      counts[f.id || (f as any).fragrance_id] = f.quantity
+      // Robust ID check (handle old items with 'fragrance_id' or 'id')
+      const fid = f.id || (f as any).fragrance_id
+      if (fid) counts[fid] = f.quantity
     })
     return counts
   }, [item.selected_fragrances])
@@ -101,9 +113,11 @@ export default function CartEditModal({ item, isWholesale, onClose, onSave }: Pr
         {/* Header */}
         <div className="p-6 md:p-8 border-b border-gray-100 flex justify-between items-center bg-white sticky top-0 z-10">
           <div>
-            <h2 className="text-xl md:text-2xl font-black text-gray-900">Configurar Surtido</h2>
+            <h2 className="text-xl md:text-2xl font-black text-gray-900">
+               {isWholesale ? 'Editar Configuración Mayorista' : 'Editar Surtido'}
+            </h2>
             <p className="text-xs font-black uppercase tracking-widest text-teal-600">
-               {loading ? 'Sincronizando...' : (product?.name || item.product_name)}
+               {loading ? 'Preparando editor...' : (product?.name || item.product_name)}
             </p>
           </div>
           <button onClick={onClose} className="p-3 bg-gray-50 rounded-2xl text-gray-400 hover:text-gray-900 transition-colors">
@@ -121,7 +135,7 @@ export default function CartEditModal({ item, isWholesale, onClose, onSave }: Pr
           ) : loading ? (
             <div className="h-64 flex flex-col items-center justify-center gap-4 text-gray-400">
                <Loader2 size={40} className="animate-spin text-teal-500" />
-               <p className="text-xs font-black uppercase tracking-widest text-center">Iniciando editor de packs...</p>
+               <p className="text-xs font-black uppercase tracking-widest text-center">Iniciando editor de packs artesanales...</p>
             </div>
           ) : product ? (
             <div className="max-w-2xl mx-auto">
@@ -139,7 +153,7 @@ export default function CartEditModal({ item, isWholesale, onClose, onSave }: Pr
         <div className="p-4 bg-teal-50 border-t border-teal-100 flex items-center justify-center gap-3">
            <Sparkles size={16} className="text-teal-600" />
            <p className="text-[10px] font-black uppercase tracking-widest text-teal-800">
-              {item.id === 'new' ? 'Se agregará a tu pedido actual' : 'Tus cambios se aplicarán al confirmar el pack'}
+              {item.id === 'new' ? 'Se agregará a tu pedido mayorista' : 'Tus cambios se aplicarán al confirmar el pack'}
            </p>
         </div>
       </div>

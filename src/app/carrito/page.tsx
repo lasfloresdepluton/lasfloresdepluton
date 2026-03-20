@@ -21,15 +21,12 @@ export default function CartPage() {
 
   // FORCE DETECTION of mode based on cart content
   const currentActualIsWholesale = useMemo(() => {
-    // If ANY item in cart has "may-" in its slug or if the store says so
     const hasWholesaleSlugs = items.some(i => i.product_slug?.startsWith('may-'))
     return hasWholesaleSlugs || is_wholesale
   }, [items, is_wholesale])
 
   useEffect(() => {
     setMounted(true)
-
-    // Sync store state if content implies wholesale
     if (items.some(i => i.product_slug?.startsWith('may-')) && !is_wholesale) {
        setWholesale(true)
     }
@@ -38,29 +35,30 @@ export default function CartPage() {
   useEffect(() => {
     if (!mounted) return
 
-    // Fetch upselling products (Based on current actual profile)
     async function loadUpsell() {
       const supabase = createBrowserClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
       )
 
-      // Query table based on wholesale status
       const table = currentActualIsWholesale ? 'wholesale_products' : 'products'
       
-      const { data } = await supabase
+      // CRITICAL FIX: Wholesale products don't have variants table join in common DB setup
+      // Fetch products simple first
+      const { data, error } = await supabase
         .from(table)
         .select(`
           *,
-          categories:category_id (id, name, slug),
-          product_variants:product_variants (
-            id, fragrance_id, image_url, is_active,
-            fragrances:fragrance_id (*)
-          )
+          categories:category_id (id, name, slug)
         `)
         .eq('is_active', true)
         .order('name')
         .limit(4)
+
+      if (error) {
+         console.error('Upsell Load Error:', error)
+         return
+      }
 
       if (data) {
         const inCartIds = items.map(i => i.product_id)
@@ -79,6 +77,7 @@ export default function CartPage() {
     if (!currentEditingItem) return
 
     const selectedFragrances = Object.entries(newCounts).map(([fid, qty]) => {
+      // Find from existing item or we preserve name from existing one
       const oldF = currentEditingItem.selected_fragrances?.find(f => (f.id === fid || (f as any).fragrance_id === fid))
       return {
         id: fid,
@@ -99,11 +98,21 @@ export default function CartPage() {
   }
 
   const handleQuickAddItem = (product: any, counts: Record<string, number>, totalQty: number, totalPrice: number) => {
-    const selectedFragrances = Object.entries(counts).map(([fid, qty]) => ({
-      id: fid,
-      name: product.product_variants?.find((v: any) => v.fragrance_id === fid || v.id === fid)?.fragrances?.name || 'Fragancia',
-      quantity: qty
-    }))
+    // If it's wholesale, we need to find names from counts via a global list?
+    // FragranceSelector already gives us correct counts. 
+    // In handleQuickAddItem, we'll need names if possible.
+    // Simplifying: the modal can now be trusted.
+    
+    // Attempting to collect names if available in product object (for retail) 
+    // or we'll just name it 'Fragancia' and it will be updated by the modal if we had better info
+    const selectedFragrances = Object.entries(counts).map(([fid, qty]) => {
+      const variantName = product.product_variants?.find((v: any) => v.fragrance_id === fid || v.id === fid)?.fragrances?.name
+      return {
+        id: fid,
+        name: variantName || 'Selección',
+        quantity: qty
+      }
+    })
 
     addItem({
       product_id: product.id,
@@ -261,7 +270,7 @@ export default function CartPage() {
                             {p.image_url ? <Image src={p.image_url} alt={p.name} fill className="object-cover group-hover:scale-110 transition-transform duration-700" /> : <div className="w-full h-full flex items-center justify-center text-4xl">🌿</div>}
                          </Link>
                          <div className="flex-1 w-full px-2">
-                            <p className="text-[9px] font-black uppercase text-teal-600 tracking-widest mb-1">{p.categories?.name || (currentActualIsWholesale ? 'Mayorista' : 'Catálogo')}</p>
+                            <p className="text-[9px] font-black uppercase text-teal-600 tracking-widest mb-1">{p.categories?.name || (currentActualIsWholesale ? 'Distribución' : 'Catálogo')}</p>
                             <h4 className="text-xs font-black text-gray-900 group-hover:text-teal-600 transition-colors line-clamp-1">{p.name}</h4>
                             <p className="text-[10px] font-bold text-gray-400">{formatPrice(price)}</p>
                          </div>
