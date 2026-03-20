@@ -66,14 +66,13 @@ export interface UserProfile {
 
 export async function getProducts(categorySlug?: string, includeWholesale: boolean = false): Promise<ProductWithVariants[]> {
   const supabase = createAdminClient()
-  console.log(`[DEBUG] getProducts called - includeWholesale: ${includeWholesale}, categorySlug: ${categorySlug}`);
-
+  
   if (includeWholesale) {
     let query = supabase
       .from('wholesale_products')
       .select(`
         *,
-        categories ( id, name, slug )
+        categories:category_id ( id, name, slug )
       `)
 
     if (categorySlug) {
@@ -82,10 +81,7 @@ export async function getProducts(categorySlug?: string, includeWholesale: boole
     }
 
     const { data, error } = await query.order('name')
-    if (error) {
-      console.error('[DEBUG] getProducts (wholesale) error:', error)
-      return []
-    }
+    if (error) return []
 
     return (data || []).map((p: any) => ({
       ...p,
@@ -98,35 +94,31 @@ export async function getProducts(categorySlug?: string, includeWholesale: boole
     })) as any[]
   }
 
-  // Simplified query for retail to rule out join errors
+  // Use explicit foreign key naming to avoid any ambiguity
   let query = supabase
     .from('products')
     .select(`
       *,
-      categories ( id, name, slug ),
+      categories:category_id ( id, name, slug ),
       product_variants (
         *,
-        fragrances (*)
+        fragrances:fragrance_id (*)
       ),
-      wholesale_tiers (*)
+      wholesale_tiers:wholesale_tiers!product_id (*)
     `)
 
   if (categorySlug) {
     const { data: cat } = await supabase.from('categories').select('id').eq('slug', categorySlug).single()
-    if (cat) {
-       query = query.eq('category_id', (cat as any).id)
-    }
+    if (cat) query = query.eq('category_id', (cat as any).id)
   }
 
   const { data, error } = await query.order('name')
   if (error) {
-    console.error('[DEBUG] getProducts (retail) error:', error)
-    // Fallback: try even simpler
-    const { data: fallback, error: e2 } = await supabase.from('products').select('*')
-    if (e2) return []
-    return (fallback ?? []).map((p: any) => ({
+    console.error('getProducts (retail) error:', error)
+    // Very basic fallback that includes categories for UI consistency
+    const { data: simple } = await supabase.from('products').select('*, categories:category_id(*)')
+    return (simple ?? []).map((p: any) => ({
       ...p,
-      categories: { id: '', name: 'Uncategorized', slug: '' },
       product_variants: [],
       wholesale_tiers: [],
       is_wholesale_only: false,
@@ -144,16 +136,17 @@ export async function getProducts(categorySlug?: string, includeWholesale: boole
 export async function getProductBySlug(slug: string): Promise<ProductWithVariants | null> {
   const supabase = createAdminClient()
   
-  const { data: retail } = await supabase
+  // Try retail first with explicit joins
+  const { data: retail, error: rError } = await supabase
     .from('products')
     .select(`
       *,
-      categories ( id, name, slug ),
+      categories:category_id ( id, name, slug ),
       product_variants (
         *,
-        fragrances (*)
+        fragrances:fragrance_id (*)
       ),
-      wholesale_tiers (*)
+      wholesale_tiers:wholesale_tiers!product_id (*)
     `)
     .eq('slug', slug)
     .single()
@@ -165,11 +158,14 @@ export async function getProductBySlug(slug: string): Promise<ProductWithVariant
     } as any
   }
 
+  if (rError) console.error('getProductBySlug (retail) error:', rError)
+
+  // Try wholesale next
   const { data: wholesale } = await supabase
     .from('wholesale_products')
     .select(`
       *,
-      categories ( id, name, slug )
+      categories:category_id ( id, name, slug )
     `)
     .eq('slug', slug)
     .single()
