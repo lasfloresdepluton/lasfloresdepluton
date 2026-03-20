@@ -5,6 +5,9 @@ import ProductCard from '@/components/shop/ProductCard'
 import Link from 'next/link'
 import { Filter } from 'lucide-react'
 
+export const revalidate = 0;
+export const dynamic = 'force-dynamic';
+
 interface PageProps {
   searchParams: Promise<{ categoria?: string; buscar?: string }>
 }

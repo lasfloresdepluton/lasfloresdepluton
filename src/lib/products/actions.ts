@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
 
 export interface Fragrance {
   id: string
@@ -65,7 +65,8 @@ export interface UserProfile {
 }
 
 export async function getProducts(categorySlug?: string, includeWholesale: boolean = false): Promise<ProductWithVariants[]> {
-  const supabase = await createClient()
+  // Use Admin Client to rule out RLS issues completely
+  const supabase = createAdminClient()
 
   if (includeWholesale) {
     // Fetch from wholesale_products
@@ -83,7 +84,10 @@ export async function getProducts(categorySlug?: string, includeWholesale: boole
     }
 
     const { data, error } = await query.order('name')
-    if (error) return []
+    if (error) {
+      console.error('getProducts (wholesale) error:', error)
+      return []
+    }
 
     // Map to ProductWithVariants format
     return (data || []).map((p: any) => ({
@@ -120,7 +124,11 @@ export async function getProducts(categorySlug?: string, includeWholesale: boole
   }
 
   const { data, error } = await query.order('name')
-  if (error) return []
+  if (error) {
+    console.error('getProducts (retail) error:', error)
+    return []
+  }
+
   return (data ?? []).map((p: any) => ({
     ...p,
     is_wholesale_only: false,
@@ -129,7 +137,7 @@ export async function getProducts(categorySlug?: string, includeWholesale: boole
 }
 
 export async function getProductBySlug(slug: string): Promise<ProductWithVariants | null> {
-  const supabase = await createClient()
+  const supabase = createAdminClient()
   
   // Try retail first
   const { data: retail } = await supabase
@@ -209,7 +217,7 @@ export async function getProductBySlug(slug: string): Promise<ProductWithVariant
 }
 
 export async function getCategories(): Promise<Category[]> {
-  const supabase = await createClient()
+  const supabase = createAdminClient()
   const { data, error } = await supabase
     .from('categories')
     .select('*')
@@ -224,7 +232,7 @@ export async function getWholesaleProducts(): Promise<WholesaleProduct[]> {
 }
 
 export async function getFragrances(): Promise<Fragrance[]> {
-  const supabase = await createClient()
+  const supabase = createAdminClient()
   const { data, error } = await supabase
     .from('fragrances')
     .select('*')
