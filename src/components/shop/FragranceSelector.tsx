@@ -120,7 +120,6 @@ export default function FragranceSelector({ product, isWholesale = false }: Frag
     setErrorMsg(null)
     const allPacks = [...draftPacks]
     
-    // Also include current selection if it's complete
     if (totalSelected > 0) {
       if (packComplete) {
         allPacks.push({
@@ -140,18 +139,25 @@ export default function FragranceSelector({ product, isWholesale = false }: Frag
     setWholesale(isWholesale)
     
     allPacks.forEach(pack => {
-      Object.entries(pack.counts).forEach(([fid, count]) => {
-        const v = activeVariants.find(v => v.fragrance_id === fid || v.id === fid)
-        addItem({
-          product_id: product.id,
-          product_name: product.name,
-          variant_id: v?.id || fid,
-          fragrance_name: (v as any)?.fragrances?.name || 'Fragancia',
-          image_url: (displayImage as any) ?? undefined,
-          quantity: count,
-          unit_price: isWholesale ? (pack.pricePerPack / (product.is_exact_total ? pack.totalUnits : 1)) : pack.pricePerPack,
-          is_pack: false,
-        })
+      // Map current counts to the structured SelectedFragrance array
+      const selectedFragrances = Object.entries(pack.counts).map(([fid, qty]) => {
+         const v = activeVariants.find(v => v.fragrance_id === fid || v.id === fid)
+         return {
+            id: fid,
+            name: (v as any)?.fragrances?.name || 'Fragancia',
+            quantity: qty
+         }
+      })
+
+      addItem({
+        product_id: product.id,
+        product_name: product.name,
+        image_url: (displayImage as any) ?? undefined,
+        quantity: 1, // We add each logical "Pack" as 1 quantity unit
+        unit_price: pack.pricePerPack,
+        is_pack: true,
+        pack_size: pack.totalUnits,
+        selected_fragrances: selectedFragrances
       })
     })
 

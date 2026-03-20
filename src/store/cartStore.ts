@@ -1,22 +1,22 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
-export interface CartFragranceSelection {
-  fragrance_id: string
-  fragrance_name: string
+export interface SelectedFragrance {
+  id: string
+  name: string
+  quantity: number
 }
 
 export interface CartItem {
-  id: string                      // unique key: product_id + variant_id or product_id + sorted(fragrance_ids)
+  id: string                      // unique key for grouping
   product_id: string
   product_name: string
-  variant_id?: string             // for single-fragrance items
-  fragrance_name?: string         // for single-fragrance items
   image_url?: string
-  quantity: number
-  unit_price: number              // retail or wholesale
+  quantity: number                // Amount of units (if single) or amount of PACKS (if grouped)
+  unit_price: number              // Price per unit or price per PACK
   is_pack: boolean
-  selected_fragrances?: CartFragranceSelection[] // for packs
+  pack_size?: number              // 10, 20, 100, etc.
+  selected_fragrances?: SelectedFragrance[]
 }
 
 interface CartState {
@@ -31,12 +31,22 @@ interface CartState {
   itemCount: () => number
 }
 
+/**
+ * Builds a deterministic ID based on product and assortment.
+ * This allows "Twin packs" to be grouped together if they have the EXACT SAME assortment.
+ */
 function buildCartId(item: Omit<CartItem, 'id'>): string {
-  if (item.is_pack && item.selected_fragrances) {
-    const fragIds = item.selected_fragrances.map((f) => f.fragrance_id).sort().join(',')
-    return `${item.product_id}::pack::${fragIds}`
+  if (item.is_pack && item.selected_fragrances && item.selected_fragrances.length > 0) {
+    // Sort by ID to ensure same assortment = same Cart ID
+    const assortmentKey = [...item.selected_fragrances]
+      .sort((a, b) => a.id.localeCompare(b.id))
+      .map(f => `${f.id}:${f.quantity}`)
+      .join('|')
+    return `${item.product_id}::pack::${assortmentKey}`
   }
-  return `${item.product_id}::${item.variant_id ?? 'no-variant'}`
+  // For standard products (single fragrance or no pack choice)
+  const variantPart = item.selected_fragrances?.[0]?.id || 'default'
+  return `${item.product_id}::${variantPart}`
 }
 
 export const useCartStore = create<CartState>()(
@@ -73,7 +83,11 @@ export const useCartStore = create<CartState>()(
 
       clearCart: () => set({ items: [] }),
 
-      setWholesale: (val) => set({ is_wholesale: val }),
+      setWholesale: (val) => {
+        // If switching from retail to wholesale or vice versa, clear cart OR we might need logic.
+        // For now, just set.
+        set({ is_wholesale: val })
+      },
 
       total: () =>
         get().items.reduce((sum, i) => sum + i.unit_price * i.quantity, 0),
@@ -81,6 +95,6 @@ export const useCartStore = create<CartState>()(
       itemCount: () =>
         get().items.reduce((sum, i) => sum + i.quantity, 0),
     }),
-    { name: 'lfp-cart' }
+    { name: 'lfp-cart-v2' } // Versioned name after breaking change in structure
   )
 )
