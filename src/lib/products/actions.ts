@@ -147,6 +147,8 @@ export interface WholesaleProduct {
   wholesale_category: string | null
   image_url: string | null
   category_id: string | null
+  min_total_qty: number
+  is_exact_total: boolean
 }
 
 
@@ -154,7 +156,7 @@ export async function getWholesaleProducts(): Promise<WholesaleProduct[]> {
   const supabase = await createClient()
   const { data, error } = await supabase
     .from('wholesale_products')
-    .select('*')
+    .select('*, categories(name)')
     .eq('is_active', true)
     .order('name')
   
