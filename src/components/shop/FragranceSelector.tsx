@@ -59,6 +59,7 @@ export default function FragranceSelector({ product, isWholesale = false }: Frag
       const jump = product.min_qty_per_variant || 1
       
       let next = current + 1
+      // If it's the first click, JUMP to the minimum
       if (current === 0 && jump > 1) {
         next = Math.min(jump, remaining)
       }
@@ -75,6 +76,7 @@ export default function FragranceSelector({ product, isWholesale = false }: Frag
       const jump = product.min_qty_per_variant || 1
       
       let next = current - 1
+      // If we go below the jump, it goes to 0
       if (current === jump) next = 0
       
       const nextMap = { ...prev, [fragId]: next }
@@ -210,7 +212,14 @@ export default function FragranceSelector({ product, isWholesale = false }: Frag
 
         {/* FRAGRANCE GRID */}
         <div className="space-y-4">
-           <h3 className="text-xs font-black uppercase tracking-[0.2em] text-gray-400">Fragancias Disponibles</h3>
+           <div className="flex justify-between items-end">
+              <h3 className="text-xs font-black uppercase tracking-[0.2em] text-gray-400">Fragancias Disponibles</h3>
+              {product.min_qty_per_variant > 1 && (
+                 <span className="text-[10px] font-black uppercase text-orange-500 bg-orange-50 px-2 py-0.5 rounded">
+                   Mínimo {product.min_qty_per_variant}u por aroma
+                 </span>
+              )}
+           </div>
            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               {activeVariants.map((v) => {
                  const count = packCounts[v.fragrance_id] || 0
