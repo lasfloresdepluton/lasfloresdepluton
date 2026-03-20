@@ -10,6 +10,7 @@ export type ProductWithVariants = Database['public']['Tables']['products']['Row'
   })[]
   wholesale_tiers: ProductWholesaleTier[]
   is_wholesale_only: boolean
+  is_exact_total: boolean
   wholesale_category: string | null
   min_qty_per_variant: number
   image_url?: string | null
@@ -64,6 +65,7 @@ export async function getProducts(categorySlug?: string, includeWholesale: boole
       product_variants: [],
       wholesale_tiers: [],
       is_wholesale_only: true,
+      is_exact_total: p.is_exact_total || false,
       wholesale_category: p.wholesale_category,
       min_qty_per_variant: p.min_qty_per_variant,
     })) as any[]
@@ -91,7 +93,10 @@ export async function getProducts(categorySlug?: string, includeWholesale: boole
 
   const { data, error } = await query.order('name')
   if (error) return []
-  return (data ?? []) as ProductWithVariants[]
+  return (data ?? []).map((p: any) => ({
+    ...p,
+    is_exact_total: false
+  })) as ProductWithVariants[]
 }
 
 export async function getProductBySlug(slug: string): Promise<ProductWithVariants | null> {
@@ -112,7 +117,12 @@ export async function getProductBySlug(slug: string): Promise<ProductWithVariant
     .eq('is_active', true)
     .single()
 
-  if (retail) return retail as ProductWithVariants
+  if (retail) {
+    return {
+      ...retail,
+      is_exact_total: false
+    } as any
+  }
 
   // Try wholesale next
   const { data: wholesale, error: wholesaleErr } = await supabase
@@ -158,6 +168,7 @@ export async function getProductBySlug(slug: string): Promise<ProductWithVariant
         wholesale_price: t.price_per_unit || t.wholesale_price,
       })),
       is_wholesale_only: true,
+      is_exact_total: w.is_exact_total || false,
       wholesale_category: w.wholesale_category,
       min_qty_per_variant: w.min_qty_per_variant,
     } as ProductWithVariants
@@ -198,6 +209,7 @@ export interface ProductWholesaleTier {
   id: string
   product_id: string
   min_total_qty: number
+  wholesale_price: number
   fixed_total_price: number | null
   unit_price: number | null
   label: string | null
