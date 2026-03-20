@@ -101,9 +101,9 @@ export default function WholesaleQuickOrder({ products, fragrances }: Props) {
         product_name: product.name,
         variant_id: fragId,
         fragrance_name: fragrance?.name || 'Fragancia',
-        image_url: product.image_url || undefined,
+        image_url: (product as any).image_url || undefined,
         quantity: qty,
-        unit_price: product.wholesale_price / (product.is_exact_total ? product.min_total_qty : 1),
+        unit_price: product.wholesale_price / ((product as any).min_total_qty || 1),
         is_pack: false,
       });
     });

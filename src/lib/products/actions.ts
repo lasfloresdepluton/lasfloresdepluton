@@ -1,20 +1,54 @@
-'use server'
-
 import { createClient } from '@/lib/supabase/server'
-import type { Database } from '@/types/database'
 
-export type ProductWithVariants = Database['public']['Tables']['products']['Row'] & {
-  categories: { name: string; slug: string } | null
-  product_variants: (Database['public']['Tables']['product_variants']['Row'] & {
-    fragrances: Database['public']['Tables']['fragrances']['Row'] | null
-  })[]
-  wholesale_tiers: ProductWholesaleTier[]
+export interface Fragrance {
+  id: string
+  name: string
+  description: string | null
+  is_active: boolean
+  created_at: string
+}
+
+export interface ProductWholesaleTier {
+  id: string
+  product_id: string
+  min_total_qty: number
+  price_per_unit: number
+  wholesale_price: number
+}
+
+export interface ProductWithVariants {
+  id: string
+  name: string
+  slug: string
+  description: string | null
+  retail_price: number
+  wholesale_price: number
+  image_url: string | null
+  is_pack: boolean
+  pack_slots: number
+  is_active: boolean
   is_wholesale_only: boolean
   is_exact_total: boolean
-  wholesale_category: string | null
   min_qty_per_variant: number
-  image_url?: string | null
+  min_total_qty?: number
+  category_id: string
+  categories: {
+    id: string
+    name: string
+    slug: string
+  }
+  product_variants: Array<{
+    id: string
+    fragrance_id: string
+    image_url: string | null
+    is_active: boolean
+    fragrances: Fragrance
+  }>
+  wholesale_tiers: ProductWholesaleTier[]
+  wholesale_category?: string
 }
+
+export type WholesaleProduct = ProductWithVariants
 
 export interface Category {
   id: string
@@ -22,14 +56,6 @@ export interface Category {
   slug: string
   description: string | null
   image_url: string | null
-  created_at: string
-}
-
-export interface Fragrance {
-  id: string
-  name: string
-  description: string | null
-  is_active: boolean
   created_at: string
 }
 
@@ -76,12 +102,15 @@ export async function getProducts(categorySlug?: string, includeWholesale: boole
     .from('products')
     .select(`
       *,
-      categories ( name, slug ),
+      categories ( id, name, slug ),
       product_variants (
-        *,
-        fragrances ( * )
+        id,
+        fragrance_id,
+        image_url,
+        is_active,
+        fragrances (*)
       ),
-      wholesale_tiers ( * )
+      wholesale_tiers (*)
     `)
     // .eq('is_active', true)
 
@@ -94,7 +123,7 @@ export async function getProducts(categorySlug?: string, includeWholesale: boole
   if (error) return []
   return (data ?? []).map((p: any) => ({
     ...p,
-    is_wholesale_only: false, // For components that still expect this field
+    is_wholesale_only: false,
     is_exact_total: false
   })) as ProductWithVariants[]
 }
@@ -103,18 +132,22 @@ export async function getProductBySlug(slug: string): Promise<ProductWithVariant
   const supabase = await createClient()
   
   // Try retail first
-  const { data: retail, error: retailErr } = await supabase
+  const { data: retail } = await supabase
     .from('products')
     .select(`
       *,
-      categories ( name, slug ),
+      categories ( id, name, slug ),
       product_variants (
-        *,
-        fragrances ( * )
-      )
+        id,
+        fragrance_id,
+        image_url,
+        is_active,
+        fragrances (*)
+      ),
+      wholesale_tiers (*)
     `)
     .eq('slug', slug)
-    .eq('is_active', true)
+    // .eq('is_active', true)
     .single()
 
   if (retail) {
@@ -125,53 +158,51 @@ export async function getProductBySlug(slug: string): Promise<ProductWithVariant
   }
 
   // Try wholesale next
-  const { data: wholesale, error: wholesaleErr } = await supabase
+  const { data: wholesale } = await supabase
     .from('wholesale_products')
     .select(`
       *,
-      categories ( name, slug )
+      categories ( id, name, slug )
     `)
     .eq('slug', slug)
-    .eq('is_active', true)
+    // .eq('is_active', true)
     .single()
 
   if (wholesale) {
-    const w = wholesale as any;
-    const [tiersRes, fragrancesRes] = await Promise.all([
-      supabase.from('wholesale_tiers').select('*').eq('product_id', w.id).order('min_total_qty', { ascending: true }),
-      supabase.from('fragrances').select('*').eq('is_active', true).order('name')
-    ])
+     const w = wholesale as any
+     // Fetch tiers for wholesale
+     const { data: tiers } = await supabase
+       .from('wholesale_tiers')
+       .select('*')
+       .eq('product_id', w.id)
+       .order('min_total_qty', { ascending: true })
 
-    const cleanName = w.name
-      .replace(' (Wholesale)', '')
-      .replace(' (Unitario)', '')
-      .replace(' (Pack 100/500)', '')
+     // Fetch all active fragrances to create synthetic variants for the pack builder
+     const { data: fragrances } = await supabase
+       .from('fragrances')
+       .select('*')
+       .eq('is_active', true)
+       .order('name')
 
-    return {
-      ...w,
-      name: cleanName,
-      is_pack: true, // Wholesale in this table are always customized packs/selections
-      pack_slots: w.min_total_qty || 100, // Default to 100 or its minimum
-      product_variants: (fragrancesRes.data || []).map((f: any) => ({
-        id: f.id,
-        fragrance_id: f.id,
-        product_id: w.id,
-        is_active: true,
-        image_url: w.image_url,
-        fragrances: f,
-        stock: 999
-      })),
-      wholesale_tiers: (tiersRes.data || []).map((t: any) => ({
-        id: t.id,
-        product_id: t.product_id,
-        min_total_qty: t.min_total_qty,
-        wholesale_price: t.price_per_unit || t.wholesale_price,
-      })),
-      is_wholesale_only: true,
-      is_exact_total: w.is_exact_total || false,
-      wholesale_category: w.wholesale_category,
-      min_qty_per_variant: w.min_qty_per_variant,
-    } as ProductWithVariants
+     const syntheticVariants = (fragrances || []).map((f: any) => ({
+       id: f.id,
+       fragrance_id: f.id,
+       image_url: null,
+       is_active: true,
+       fragrances: f
+     }))
+
+     return {
+       ...w,
+       is_pack: true,
+       pack_slots: w.min_total_qty || 100,
+       is_wholesale_only: true,
+       is_exact_total: w.is_exact_total || false,
+       product_variants: syntheticVariants,
+       wholesale_tiers: tiers || [],
+       wholesale_price: w.wholesale_price,
+       min_qty_per_variant: w.min_qty_per_variant || 1 // Fallback
+     } as any
   }
 
   return null
@@ -179,79 +210,27 @@ export async function getProductBySlug(slug: string): Promise<ProductWithVariant
 
 export async function getCategories(): Promise<Category[]> {
   const supabase = await createClient()
-  const { data } = await supabase.from('categories').select('*').order('name')
-  return (data ?? []) as Category[]
+  const { data, error } = await supabase
+    .from('categories')
+    .select('*')
+    .order('name')
+  
+  if (error) return []
+  return data
+}
+
+export async function getWholesaleProducts(): Promise<WholesaleProduct[]> {
+  return getProducts(undefined, true)
 }
 
 export async function getFragrances(): Promise<Fragrance[]> {
   const supabase = await createClient()
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('fragrances')
     .select('*')
     .eq('is_active', true)
     .order('name')
-  return (data ?? []) as Fragrance[]
-}
-
-export async function getUserRole(userId: string): Promise<UserProfile | null> {
-  const supabase = await createClient()
-  const { data } = await supabase
-    .from('profiles')
-    .select('role, is_verified_wholesaler')
-    .eq('id', userId)
-    .single()
-  return data as UserProfile | null
-}
-
-// ── WHOLESALE TIERS ──────────────────────────────────────────────────────────
-
-export interface ProductWholesaleTier {
-  id: string
-  product_id: string
-  min_total_qty: number
-  wholesale_price: number
-  fixed_total_price: number | null
-  unit_price: number | null
-  label: string | null
-}
-
-export interface WholesaleProduct {
-  id: string
-  name: string
-  slug: string
-  description: string | null
-  retail_price: number
-  wholesale_price: number
-  min_qty_per_variant: number
-  wholesale_category: string | null
-  image_url: string | null
-  category_id: string | null
-  min_total_qty: number
-  is_exact_total: boolean
-}
-
-
-export async function getWholesaleProducts(): Promise<WholesaleProduct[]> {
-  const supabase = await createClient()
-  const { data, error } = await supabase
-    .from('wholesale_products')
-    .select('*, categories(name)')
-    .eq('is_active', true)
-    .order('name')
   
-  if (error) {
-    console.error('Error fetching wholesale products:', error)
-    return []
-  }
-  return data as WholesaleProduct[]
-}
-
-export async function getWholesaleTiers(productId: string): Promise<ProductWholesaleTier[]> {
-  const supabase = await createClient()
-  const { data } = await supabase
-    .from('wholesale_tiers')
-    .select('*')
-    .eq('product_id', productId)
-    .order('min_total_qty', { ascending: true })
-  return (data ?? []) as ProductWholesaleTier[]
+  if (error) return []
+  return data
 }
