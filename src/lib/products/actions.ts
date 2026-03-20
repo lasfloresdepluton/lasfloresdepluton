@@ -49,7 +49,7 @@ export async function getProducts(categorySlug?: string, includeWholesale: boole
         *,
         categories ( id, name, slug )
       `)
-      .eq('is_active', true)
+      // .eq('is_active', true)
 
     if (categorySlug) {
       const { data: cat } = await supabase.from('categories').select('id').eq('slug', categorySlug).single()
@@ -83,7 +83,7 @@ export async function getProducts(categorySlug?: string, includeWholesale: boole
       ),
       wholesale_tiers ( * )
     `)
-    .eq('is_active', true)
+    // .eq('is_active', true)
 
   if (categorySlug) {
     const { data: cat } = await supabase.from('categories').select('id').eq('slug', categorySlug).single()
