@@ -25,17 +25,17 @@ export default function Navbar({ logoUrl }: { logoUrl?: string | null }) {
     <header className="fixed top-0 left-0 right-0 z-[100] px-6 py-4 bg-white/80 backdrop-blur-xl border-b border-gray-100">
       <nav className="max-w-7xl mx-auto flex items-center justify-between">
         {/* Logo */}
-        <Link href="/" className="flex items-center gap-3 group">
+        <Link href="/" className="flex items-center gap-4 group">
           {logoUrl ? (
-            <div className="relative h-8 w-32 transition-transform group-hover:scale-105">
+            <div className="relative h-16 w-64 transition-transform group-hover:scale-105">
               <Image src={logoUrl} alt="Las Flores de Plutón" fill className="object-contain object-left" priority />
             </div>
           ) : (
             <>
-              <div className="w-10 h-10 rounded-full bg-teal-500 flex items-center justify-center transition-transform group-hover:scale-110 shadow-lg shadow-teal-100">
-                <Leaf size={18} color="white" />
+              <div className="w-16 h-16 rounded-full bg-teal-500 flex items-center justify-center transition-transform group-hover:scale-110 shadow-lg shadow-teal-100">
+                <Leaf size={32} color="white" />
               </div>
-              <span className="text-xl font-black text-gray-900 tracking-tight">
+              <span className="text-2xl font-black text-gray-900 tracking-tight">
                 Las Flores <span className="text-teal-600">de Plutón</span>
               </span>
             </>
