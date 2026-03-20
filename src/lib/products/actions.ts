@@ -84,7 +84,6 @@ export async function getProducts(categorySlug?: string, includeWholesale: boole
       wholesale_tiers ( * )
     `)
     .eq('is_active', true)
-    .or('is_wholesale_only.eq.false,is_wholesale_only.is.null') // Retail only (includes null)
 
   if (categorySlug) {
     const { data: cat } = await supabase.from('categories').select('id').eq('slug', categorySlug).single()
@@ -95,6 +94,7 @@ export async function getProducts(categorySlug?: string, includeWholesale: boole
   if (error) return []
   return (data ?? []).map((p: any) => ({
     ...p,
+    is_wholesale_only: false, // For components that still expect this field
     is_exact_total: false
   })) as ProductWithVariants[]
 }
