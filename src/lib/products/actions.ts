@@ -87,7 +87,6 @@ export async function getProducts(categorySlug?: string, includeWholesale: boole
       return []
     }
 
-    console.log(`[DEBUG] getProducts (wholesale) found ${data?.length || 0} items`);
     return (data || []).map((p: any) => ({
       ...p,
       product_variants: [],
@@ -99,17 +98,14 @@ export async function getProducts(categorySlug?: string, includeWholesale: boole
     })) as any[]
   }
 
-  // Regular retail products
+  // Simplified query for retail to rule out join errors
   let query = supabase
     .from('products')
     .select(`
       *,
       categories ( id, name, slug ),
       product_variants (
-        id,
-        fragrance_id,
-        image_url,
-        is_active,
+        *,
         fragrances (*)
       ),
       wholesale_tiers (*)
@@ -118,7 +114,6 @@ export async function getProducts(categorySlug?: string, includeWholesale: boole
   if (categorySlug) {
     const { data: cat } = await supabase.from('categories').select('id').eq('slug', categorySlug).single()
     if (cat) {
-       console.log(`[DEBUG] Filtering by category ID: ${(cat as any).id}`);
        query = query.eq('category_id', (cat as any).id)
     }
   }
@@ -126,10 +121,19 @@ export async function getProducts(categorySlug?: string, includeWholesale: boole
   const { data, error } = await query.order('name')
   if (error) {
     console.error('[DEBUG] getProducts (retail) error:', error)
-    return []
+    // Fallback: try even simpler
+    const { data: fallback, error: e2 } = await supabase.from('products').select('*')
+    if (e2) return []
+    return (fallback ?? []).map((p: any) => ({
+      ...p,
+      categories: { id: '', name: 'Uncategorized', slug: '' },
+      product_variants: [],
+      wholesale_tiers: [],
+      is_wholesale_only: false,
+      is_exact_total: false
+    })) as any[]
   }
 
-  console.log(`[DEBUG] getProducts (retail) found ${data?.length || 0} items`);
   return (data ?? []).map((p: any) => ({
     ...p,
     is_wholesale_only: false,
@@ -140,17 +144,13 @@ export async function getProducts(categorySlug?: string, includeWholesale: boole
 export async function getProductBySlug(slug: string): Promise<ProductWithVariants | null> {
   const supabase = createAdminClient()
   
-  // Try retail first
   const { data: retail } = await supabase
     .from('products')
     .select(`
       *,
       categories ( id, name, slug ),
       product_variants (
-        id,
-        fragrance_id,
-        image_url,
-        is_active,
+        *,
         fragrances (*)
       ),
       wholesale_tiers (*)
@@ -165,7 +165,6 @@ export async function getProductBySlug(slug: string): Promise<ProductWithVariant
     } as any
   }
 
-  // Try wholesale next
   const { data: wholesale } = await supabase
     .from('wholesale_products')
     .select(`
