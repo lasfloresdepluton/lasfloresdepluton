@@ -1,7 +1,7 @@
 import Navbar from './Navbar';
 import { getLogo } from '@/lib/admin/actions';
 
-export default async function NavbarWrapper({ cartCount }: { cartCount?: number }) {
+export default async function NavbarWrapper() {
   const logoUrl = await getLogo();
-  return <Navbar cartCount={cartCount} logoUrl={logoUrl} />;
+  return <Navbar logoUrl={logoUrl} />;
 }

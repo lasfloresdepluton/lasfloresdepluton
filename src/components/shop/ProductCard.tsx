@@ -36,6 +36,7 @@ export default function ProductCard({ product, isWholesale = false }: ProductCar
     addItem({
       product_id: product.id,
       product_name: product.name,
+      product_slug: product.slug,
       image_url: imageUrl ?? undefined,
       quantity: 1,
       unit_price: price,

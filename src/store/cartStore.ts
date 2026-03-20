@@ -11,6 +11,7 @@ export interface CartItem {
   id: string                      // unique key for grouping
   product_id: string
   product_name: string
+  product_slug?: string
   image_url?: string
   quantity: number                // Amount of units (if single) or amount of PACKS (if grouped)
   unit_price: number              // Price per unit or price per PACK
@@ -24,6 +25,7 @@ interface CartState {
   is_wholesale: boolean
   addItem: (item: Omit<CartItem, 'id'>) => void
   removeItem: (id: string) => void
+  replaceItem: (oldId: string, item: Omit<CartItem, 'id'>) => void
   updateQuantity: (id: string, quantity: number) => void
   clearCart: () => void
   setWholesale: (val: boolean) => void
@@ -72,6 +74,15 @@ export const useCartStore = create<CartState>()(
 
       removeItem: (id) =>
         set((state) => ({ items: state.items.filter((i) => i.id !== id) })),
+
+      replaceItem: (oldId, item) => {
+        const newId = buildCartId(item)
+        set((state) => ({
+          items: state.items.map((i) =>
+            i.id === oldId ? { ...item, id: newId } : i
+          ),
+        }))
+      },
 
       updateQuantity: (id, quantity) =>
         set((state) => ({

@@ -112,6 +112,7 @@ export default function WholesaleQuickOrder({ products, fragrances }: Props) {
     addItem({
       product_id: product.id,
       product_name: product.name,
+      product_slug: product.slug,
       image_url: (product as any).image_url || undefined,
       quantity: 1, 
       unit_price: totalPriceOfSelection,

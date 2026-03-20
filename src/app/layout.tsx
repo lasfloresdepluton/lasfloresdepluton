@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
+import NavbarWrapper from '@/components/layout/NavbarWrapper';
 
 export const metadata: Metadata = {
   title: 'Las Flores de Plutón | Sahumerios Artesanales',
@@ -26,7 +27,12 @@ export default function RootLayout({
 }) {
   return (
     <html lang="es">
-      <body>{children}</body>
+      <body className="bg-[color:var(--bg-cream)]">
+        <NavbarWrapper />
+        <main className="pt-24 min-h-screen">
+          {children}
+        </main>
+      </body>
     </html>
   );
 }

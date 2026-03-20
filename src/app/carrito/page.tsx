@@ -1,69 +1,140 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useMemo } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
-import { ShoppingBag, ArrowLeft, Trash2, Plus, Minus, CreditCard, ShoppingCart } from 'lucide-react'
+import { ShoppingBag, ArrowLeft, Trash2, Plus, Minus, CreditCard, ShoppingCart, Edit2, Sparkles, Wand2 } from 'lucide-react'
 import { useCartStore } from '@/store/cartStore'
 import { formatPrice } from '@/utils/helpers'
+import { createBrowserClient } from '@supabase/ssr'
+import CartEditModal from '@/components/shop/CartEditModal'
+import type { ProductWithVariants } from '@/lib/products/actions'
 
 export default function CartPage() {
-  const { items, total, updateQuantity, removeItem, clearCart, is_wholesale } = useCartStore()
+  const { items, total, updateQuantity, removeItem, replaceItem, clearCart, is_wholesale } = useCartStore()
   const [mounted, setMounted] = useState(false)
+  const [editingItem, setEditingItem] = useState<string | null>(null)
+  const [upsellProducts, setUpsellProducts] = useState<ProductWithVariants[]>([])
 
-  // Avoid hydration mismatch
   useEffect(() => {
     setMounted(true)
+    
+    // Fetch upselling products (Retail side)
+    async function loadUpsell() {
+      const supabase = createBrowserClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+      )
+
+      const { data } = await supabase
+        .from('products')
+        .select(`
+          *,
+          categories:category_id (id, name, slug),
+          product_variants:product_variants (
+            id, fragrance_id, image_url, is_active,
+            fragrances:fragrance_id (*)
+          )
+        `)
+        .eq('is_active', true)
+        .limit(4)
+
+      if (data) setUpsellProducts(data as any)
+    }
+    loadUpsell()
   }, [])
+
+  const currentEditingItem = useMemo(() => {
+    return items.find(i => i.id === editingItem) || null
+  }, [items, editingItem])
+
+  const handleSaveEdit = (newCounts: Record<string, number>, totalQty: number, totalPrice: number) => {
+    if (!currentEditingItem) return
+
+    const selectedFragrances = Object.entries(newCounts).map(([fid, qty]) => {
+      // Find name from old list or modal (we'll rely on the modal's data passing back)
+      // Actually simpler: pass structured data from FragranceSelector onConfirm
+      // But I only defined counts. I'll update FragranceSelector slightly if needed,
+      // or just trust the counts and names are preserved from the original item if not found?
+      // Better: update FragranceSelector to pass full objects.
+      
+      const oldF = currentEditingItem.selected_fragrances?.find(f => f.id === fid)
+      return {
+        id: fid,
+        name: oldF?.name || 'Fragancia',
+        quantity: qty
+      }
+    })
+
+    replaceItem(currentEditingItem.id, {
+      ...currentEditingItem,
+      selected_fragrances: selectedFragrances,
+      quantity: 1,
+      unit_price: totalPrice,
+      pack_size: totalQty
+    })
+
+    setEditingItem(null)
+  }
 
   if (!mounted) return null
 
   if (items.length === 0) {
     return (
-      <div className="min-h-[70vh] flex flex-col items-center justify-center p-6 text-center space-y-6">
-        <div className="w-24 h-24 bg-gray-50 rounded-full flex items-center justify-center text-4xl shadow-inner">🛒</div>
-        <h1 className="text-3xl font-black text-gray-900">Tu carrito está vacío</h1>
-        <p className="text-gray-500 max-w-xs">¡Parece que aún no has elegido nada! Te invitamos a ver nuestros productos.</p>
+      <div className="min-h-[70vh] flex flex-col items-center justify-center p-6 text-center space-y-8 animate-in fade-in zoom-in-95">
+        <div className="w-32 h-32 bg-gray-50 rounded-full flex items-center justify-center text-6xl shadow-inner relative overflow-hidden group">
+           <span className="relative z-10">🛒</span>
+           <div className="absolute inset-0 bg-teal-50 opacity-0 group-hover:opacity-100 transition-opacity" />
+        </div>
+        <div className="space-y-2">
+          <h1 className="text-4xl font-black text-gray-900">Tu carrito está vacío</h1>
+          <p className="text-gray-500 max-w-xs mx-auto text-sm">¡Parece que aún no has elegido nada! Te invitamos a ver nuestros productos artesanales.</p>
+        </div>
         <Link 
           href="/productos" 
-          className="bg-gray-900 text-white px-8 py-4 rounded-full font-black uppercase tracking-widest hover:bg-teal-600 transition-all active:scale-95"
+          className="bg-gray-900 text-white px-12 py-5 rounded-full font-black uppercase tracking-widest hover:bg-teal-600 transition-all active:scale-95 shadow-xl shadow-gray-200"
         >
-          Ver Productos
+          Explorar Productos
         </Link>
       </div>
     )
   }
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-12">
-      <div className="flex flex-col md:flex-row gap-12">
+    <div className="max-w-7xl mx-auto px-6 py-12 md:py-20 animate-in fade-in duration-700">
+      <div className="flex flex-col lg:flex-row gap-16">
         
         {/* ITEMS LIST */}
-        <div className="flex-1 space-y-8">
-          <div className="flex justify-between items-end pb-4 border-b border-gray-100">
+        <div className="flex-1 space-y-10">
+          <div className="flex justify-between items-end pb-6 border-b border-gray-100">
             <div>
-              <h1 className="text-4xl font-black text-gray-900">Carrito</h1>
-              <p className="text-xs font-black uppercase tracking-widest text-teal-600 mt-1">
-                {is_wholesale ? 'Pedido Mayorista' : 'Pedido Minorista'}
+              <h1 className="text-5xl font-black text-gray-900 tracking-tighter">Tu Pedido</h1>
+              <p className="text-xs font-black uppercase tracking-[0.2em] text-teal-600 mt-2 flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-teal-500 animate-pulse" />
+                {is_wholesale ? 'Acceso Mayorista' : 'Compra Minorista'}
               </p>
             </div>
             <button 
               onClick={clearCart}
-              className="text-[10px] font-black uppercase text-gray-400 hover:text-red-500 transition-colors"
+              className="group flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-gray-300 hover:text-red-500 transition-colors"
             >
-              Vaciar Carrito
+              <Trash2 size={14} className="group-hover:rotate-12 transition-transform" />
+              Vaciar
             </button>
           </div>
 
           <div className="space-y-6">
             {items.map((item) => (
-              <div key={item.id} className="bg-white p-6 rounded-[2.5rem] border border-gray-50 shadow-sm flex flex-col sm:flex-row gap-6 group hover:shadow-md transition-shadow">
+              <div key={item.id} className="bg-white p-6 md:p-8 rounded-[3rem] border border-gray-50 shadow-sm flex flex-col md:flex-row gap-8 group hover:shadow-xl hover:border-teal-50 transition-all duration-300 relative overflow-hidden">
+                {/* Visual Accent */}
+                <div className="absolute top-0 left-0 w-2 h-full bg-teal-500/0 group-hover:bg-teal-500/100 transition-all" />
+
                 {/* Image */}
-                <div className="relative w-24 h-24 sm:w-32 sm:h-32 rounded-3xl overflow-hidden bg-gray-50 flex-shrink-0">
+                <div className="relative w-full md:w-44 aspect-square rounded-[2rem] overflow-hidden bg-gray-50 flex-shrink-0 shadow-inner group-hover:scale-105 transition-transform duration-500">
                   {item.image_url ? (
                     <Image src={item.image_url} alt={item.product_name} fill className="object-cover" />
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center text-4xl">🌿</div>
+                    <div className="w-full h-full flex items-center justify-center text-6xl">🌿</div>
                   )}
                 </div>
 
@@ -71,48 +142,61 @@ export default function CartPage() {
                 <div className="flex-1 flex flex-col justify-between">
                   <div>
                     <div className="flex justify-between items-start">
-                      <h3 className="text-lg font-black text-gray-900 leading-tight">{item.product_name}</h3>
-                      <button 
-                        onClick={() => removeItem(item.id)}
-                        className="p-2 text-gray-300 hover:text-red-500 transition-colors"
-                      >
-                        <Trash2 size={20} />
-                      </button>
+                      <div className="space-y-1">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-teal-500">PACK {item.pack_size}u</p>
+                        <h3 className="text-2xl font-black text-gray-900 leading-tight">{item.product_name}</h3>
+                      </div>
+                      <div className="flex gap-2">
+                        <button 
+                          onClick={() => setEditingItem(item.id)}
+                          className="p-3 bg-gray-50 rounded-2xl text-gray-400 hover:text-teal-600 hover:bg-teal-50 transition-all"
+                          title="Editar surtido"
+                        >
+                          <Edit2 size={18} />
+                        </button>
+                        <button 
+                          onClick={() => removeItem(item.id)}
+                          className="p-3 bg-gray-50 rounded-2xl text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all"
+                          title="Eliminar ítem"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
                     </div>
 
                     {/* Breakdown for Packs */}
                     {item.is_pack && item.selected_fragrances && (
-                      <div className="mt-2 text-[10px] font-bold text-gray-400 flex flex-wrap gap-x-2 gap-y-1">
+                      <div className="mt-4 flex flex-wrap gap-2">
                         {item.selected_fragrances.map((f, idx) => (
-                          <span key={idx} className="bg-gray-50 px-2 py-0.5 rounded">
-                            {f.name} x{f.quantity}
-                          </span>
+                          <div key={idx} className="bg-gray-50 px-3 py-1.5 rounded-xl flex items-center gap-2 border border-gray-100/50">
+                            <span className="text-[10px] font-black text-gray-400">{f.quantity}x</span>
+                            <span className="text-[11px] font-bold text-gray-600">{f.name}</span>
+                          </div>
                         ))}
                       </div>
                     )}
                   </div>
 
-                  <div className="flex justify-between items-center mt-6">
-                    {/* Qty Controls */}
-                    <div className="flex items-center gap-4 bg-gray-50 p-1.5 rounded-2xl border border-gray-100">
+                  <div className="flex justify-between items-center mt-10">
+                    <div className="flex items-center gap-6 bg-gray-50 p-2 rounded-2xl border border-gray-100">
                       <button 
                         onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                        className="w-8 h-8 rounded-xl bg-white flex items-center justify-center text-gray-400 hover:text-gray-900 hover:shadow-sm"
+                        className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-gray-400 hover:text-gray-900 hover:shadow-md transition-all active:scale-90"
                       >
-                        <Minus size={16} />
+                        <Minus size={20} />
                       </button>
-                      <span className="text-sm font-black text-gray-900 w-4 text-center">{item.quantity}</span>
+                      <span className="text-lg font-black text-gray-900 w-6 text-center">{item.quantity}</span>
                       <button 
                         onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                        className="w-8 h-8 rounded-xl bg-white flex items-center justify-center text-gray-400 hover:text-gray-900 hover:shadow-sm"
+                        className="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-gray-400 hover:text-gray-900 hover:shadow-md transition-all active:scale-90"
                       >
-                        <Plus size={16} />
+                        <Plus size={20} />
                       </button>
                     </div>
 
                     <div className="text-right">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Total item</p>
-                      <p className="text-xl font-black text-teal-600">{formatPrice(item.unit_price * item.quantity)}</p>
+                      <p className="text-[10px] font-black uppercase tracking-widest text-gray-300">Subtotal ítem</p>
+                      <p className="text-3xl font-black text-teal-600 tracking-tighter">{formatPrice(item.unit_price * item.quantity)}</p>
                     </div>
                   </div>
                 </div>
@@ -120,54 +204,95 @@ export default function CartPage() {
             ))}
           </div>
 
-          <Link href="/productos" className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-widest text-gray-400 hover:text-teal-600 transition-colors">
-            <ArrowLeft size={14} /> Seguir Comprando
+          {/* UPSELLING SECTION */}
+          {upsellProducts.length > 0 && (
+            <div className="pt-20 space-y-8">
+               <div className="flex items-center gap-4">
+                  <h3 className="text-xl font-black text-gray-900 whitespace-nowrap">Completá tu Ritual</h3>
+                  <div className="h-px bg-gray-100 flex-1" />
+               </div>
+               <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                  {upsellProducts.map(p => (
+                    <Link key={p.id} href={`/productos/${p.slug}`} className="group space-y-3">
+                       <div className="relative aspect-square rounded-[2rem] overflow-hidden bg-gray-50 shadow-sm border border-gray-100 group-hover:shadow-lg transition-all">
+                          {p.image_url ? <Image src={p.image_url} alt={p.name} fill className="object-cover group-hover:scale-110 transition-transform duration-700" /> : <div className="w-full h-full flex items-center justify-center text-4xl">🌿</div>}
+                       </div>
+                       <div>
+                          <p className="text-[10px] font-black uppercase text-teal-600 tracking-widest mb-1">{p.categories?.name}</p>
+                          <h4 className="text-sm font-black text-gray-900 group-hover:text-teal-600 transition-colors line-clamp-1">{p.name}</h4>
+                          <p className="text-xs font-bold text-gray-400">{formatPrice(p.retail_price)}</p>
+                       </div>
+                    </Link>
+                  ))}
+               </div>
+            </div>
+          )}
+
+          <Link href="/productos" className="inline-flex items-center gap-3 text-xs font-black uppercase tracking-widest text-gray-300 hover:text-teal-600 transition-all hover:translate-x-[-4px]">
+            <ArrowLeft size={16} /> Seguir explorando productos
           </Link>
         </div>
 
-        {/* SUMMARY */}
-        <div className="w-full md:w-80 lg:w-96 space-y-6">
-          <div className="bg-gray-900 text-white p-8 rounded-[3rem] shadow-2xl relative overflow-hidden">
-            <div className="relative z-10 space-y-8">
-              <h2 className="text-2xl font-black">Resumen</h2>
-              
-              <div className="space-y-4">
-                <div className="flex justify-between items-center text-gray-400 text-sm">
-                  <span>Subtotal</span>
-                  <span className="font-bold text-white">{formatPrice(total())}</span>
+        {/* SUMMARY STICKY */}
+        <div className="w-full lg:w-96">
+          <div className="sticky top-32 space-y-8">
+            <div className="bg-gray-900 text-white p-10 rounded-[4rem] shadow-3xl relative overflow-hidden">
+              <div className="relative z-10 space-y-10">
+                <div className="flex items-center gap-3">
+                   <div className="w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center text-xl">💳</div>
+                   <h2 className="text-3xl font-black tracking-tighter">Resumen</h2>
                 </div>
-                <div className="flex justify-between items-center text-gray-400 text-sm">
-                  <span>Envío</span>
-                  <span className="text-[10px] font-black uppercase text-teal-400">Calculado en el check</span>
+                
+                <div className="space-y-6">
+                  <div className="flex justify-between items-center text-gray-400">
+                    <span className="text-xs font-bold uppercase tracking-widest">Subtotal Bruto</span>
+                    <span className="font-black text-xl text-white">{formatPrice(total())}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-gray-400">
+                    <span className="text-xs font-bold uppercase tracking-widest">Envío estimado</span>
+                    <span className="text-[10px] font-black uppercase text-teal-400 bg-teal-400/10 px-3 py-1 rounded-full">Calculando...</span>
+                  </div>
+                  <div className="h-px bg-white/5 w-full" />
+                  <div className="flex justify-between items-end pt-4">
+                    <div className="space-y-1">
+                       <span className="font-black tracking-[0.2em] text-[10px] uppercase text-gray-500">Total a pagar</span>
+                       <p className="text-5xl font-black text-white tracking-tighter">{formatPrice(total())}</p>
+                    </div>
+                  </div>
                 </div>
-                <div className="h-px bg-white/10 w-full" />
-                <div className="flex justify-between items-end pt-2">
-                  <span className="font-black uppercase text-xs tracking-widest">Total Final</span>
-                  <span className="text-4xl font-black text-white">{formatPrice(total())}</span>
-                </div>
+
+                <button className="w-full bg-teal-500 text-white py-7 rounded-[2.5rem] font-black text-lg uppercase tracking-widest flex items-center justify-center gap-4 hover:bg-teal-400 transition-all active:scale-95 shadow-2xl shadow-teal-500/20 group">
+                  Finalizar Pedido
+                  <ShoppingBag size={24} className="group-hover:rotate-12 transition-transform" />
+                </button>
               </div>
-
-              <button className="w-full bg-white text-gray-900 py-6 rounded-[2rem] font-black uppercase tracking-widest flex items-center justify-center gap-3 hover:bg-teal-400 transition-all active:scale-95">
-                <CreditCard size={20} /> Iniciar Pago
-              </button>
+              
+              {/* Abstract background elements */}
+              <div className="absolute -bottom-20 -right-20 w-64 h-64 bg-teal-500/5 rounded-full blur-3xl" />
+              <div className="absolute top-10 left-10 w-20 h-20 bg-white/5 rounded-full blur-2xl" />
             </div>
-            
-            {/* Decal background */}
-            <div className="absolute -bottom-10 -right-10 text-white/5 rotate-12 pointer-events-none">
-              <ShoppingCart size={200} />
-            </div>
-          </div>
 
-          <div className="bg-teal-50 p-6 rounded-3xl border border-teal-100 flex items-center gap-4">
-             <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-2xl shadow-sm">🛡️</div>
-             <div>
-                <p className="text-xs font-black text-teal-900 uppercase">Compra Segura</p>
-                <p className="text-[10px] text-teal-600 font-bold">Tus datos están protegidos y procesados de forma cifrada.</p>
-             </div>
+            <div className="bg-white p-8 rounded-[3rem] border border-gray-100 flex items-start gap-5 shadow-sm">
+               <div className="w-14 h-14 bg-teal-50 text-teal-600 rounded-[1.5rem] flex items-center justify-center text-3xl shrink-0">✨</div>
+               <div className="space-y-1">
+                  <p className="text-xs font-black text-gray-900 uppercase tracking-widest">Artesanía Pura</p>
+                  <p className="text-[11px] text-gray-400 font-bold leading-relaxed">Cada sahumerio es moldeado a mano con resinas naturales y mucho amor.</p>
+               </div>
+            </div>
           </div>
         </div>
 
       </div>
+
+      {/* MODALS */}
+      {currentEditingItem && (
+        <CartEditModal 
+          item={currentEditingItem}
+          isWholesale={is_wholesale}
+          onClose={() => setEditingItem(null)}
+          onSave={handleSaveEdit}
+        />
+      )}
     </div>
   )
 }

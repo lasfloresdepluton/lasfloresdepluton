@@ -17,9 +17,16 @@ interface DraftPack {
 interface FragranceSelectorProps {
   product: ProductWithVariants
   isWholesale?: boolean
+  initialSelection?: Record<string, number>
+  onConfirm?: (counts: Record<string, number>, total: number, price: number) => void
 }
 
-export default function FragranceSelector({ product, isWholesale = false }: FragranceSelectorProps) {
+export default function FragranceSelector({ 
+  product, 
+  isWholesale = false,
+  initialSelection,
+  onConfirm 
+}: FragranceSelectorProps) {
   const addItem = useCartStore((s) => s.addItem)
   const setWholesale = useCartStore((s) => s.setWholesale)
 
@@ -43,7 +50,7 @@ export default function FragranceSelector({ product, isWholesale = false }: Frag
   const activeVariants = product.product_variants.filter((v) => v.is_active)
   
   // 2. STATE
-  const [packCounts, setPackCounts] = useState<Record<string, number>>({})
+  const [packCounts, setPackCounts] = useState<Record<string, number>>(initialSelection || {})
   const [draftPacks, setDraftPacks] = useState<DraftPack[]>([])
   const [added, setAdded] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
@@ -100,6 +107,11 @@ export default function FragranceSelector({ product, isWholesale = false }: Frag
     const minViolation = Object.entries(packCounts).find(([_, count]) => count > 0 && count < (product.min_qty_per_variant || 1))
     if (minViolation) {
       setErrorMsg(`Mínimo ${product.min_qty_per_variant} unidades por fragancia.`)
+      return
+    }
+
+    if (onConfirm) {
+      onConfirm(packCounts, totalSelected, basePrice)
       return
     }
 
@@ -161,6 +173,7 @@ export default function FragranceSelector({ product, isWholesale = false }: Frag
       addItem({
         product_id: product.id,
         product_name: product.name,
+        product_slug: product.slug,
         image_url: (displayImage as any) ?? undefined,
         quantity: 1, 
         unit_price: pack.priceOfThisPack,
